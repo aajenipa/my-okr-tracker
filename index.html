@@ -85,13 +85,19 @@
     <script type="module">
         // --- Firebase SDK Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, addDoc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = {
+            apiKey: "AIzaSyAAhK518n0CoogsD84u_5Wa65IQrnphpbg",
+            authDomain: "my-okr-tracker-a77ed.firebaseapp.com",
+            projectId: "my-okr-tracker-a77ed",
+            storageBucket: "my-okr-tracker-a77ed.appspot.com",
+            messagingSenderId: "344615597808",
+            appId: "1:344615597808:web:a976849992dc0f9a5d3435",
+            measurementId: "G-BQW8HWHBM3"
+        };
 
         // --- App State ---
         let db, auth, userId;
@@ -204,12 +210,12 @@
             row.querySelector('button').addEventListener('click', () => deleteActivity(doc.id));
         };
 
-        window.addActivityRow = () => addDoc(collection(db, `artifacts/${appId}/users/${userId}/activities`), {
+        window.addActivityRow = () => addDoc(collection(db, `users/${userId}/activities`), {
             date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), project: '', action: '', 
             status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date()
         });
-        const updateActivity = (id, data) => setDoc(doc(db, `artifacts/${appId}/users/${userId}/activities`, id), data, { merge: true });
-        const deleteActivity = (id) => deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/activities`, id));
+        const updateActivity = (id, data) => setDoc(doc(db, `users/${userId}/activities`, id), data, { merge: true });
+        const deleteActivity = (id) => deleteDoc(doc(db, `users/${userId}/activities`, id));
         
         // --- Objectives UI & Logic ---
         const objectivesContainer = document.getElementById('objectives-container');
@@ -305,9 +311,9 @@
             });
         };
 
-        window.addObjective = () => addDoc(collection(db, `artifacts/${appId}/users/${userId}/objectives`), { title: 'New Objective', krs: [], createdAt: new Date() });
-        const updateObjective = (id, data) => setDoc(doc(db, `artifacts/${appId}/users/${userId}/objectives`, id), data, { merge: true });
-        const deleteObjective = (id) => deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/objectives`, id));
+        window.addObjective = () => addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], createdAt: new Date() });
+        const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
+        const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
         const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q1', result: '', target: '', actual: '', notes: '' }] });
         const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
 
@@ -328,7 +334,7 @@
                         if (activitiesUnsubscribe) activitiesUnsubscribe();
                         if (objectivesUnsubscribe) objectivesUnsubscribe();
 
-                        const activitiesQuery = query(collection(db, `artifacts/${appId}/users/${userId}/activities`));
+                        const activitiesQuery = query(collection(db, `users/${userId}/activities`));
                         activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
                             activityTableBody.innerHTML = '';
                             snapshot.docs.forEach(renderActivityRow);
@@ -337,7 +343,7 @@
                             calculateUtilization();
                         });
 
-                        const objectivesQuery = query(collection(db, `artifacts/${appId}/users/${userId}/objectives`), orderBy("createdAt"));
+                        const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("createdAt"));
                         objectivesUnsubscribe = onSnapshot(objectivesQuery, snapshot => {
                             objectivesContainer.innerHTML = '';
                             snapshot.docs.forEach(renderObjectiveBlock);
@@ -352,15 +358,11 @@
                     }
                 });
 
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                await signInAnonymously(auth);
 
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                document.getElementById('loader').innerHTML = "Failed to load application.";
+                document.getElementById('loader').innerHTML = "Failed to load application. Check console for errors and ensure Firebase config is correct.";
             }
         }
 
