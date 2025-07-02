@@ -57,12 +57,11 @@
             <div id="activity" class="tab-content active">
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Weekly Activity Log</h2>
-                    <div class="flex items-center space-x-2 sm:space-x-4">
+                    <div class="flex items-center space-x-2 sm:space-x-4 flex-wrap">
                         <div class="text-sm"><label for="year-filter" class="font-medium text-gray-600">Year:</label><select id="year-filter" class="p-2 border rounded-md bg-white"></select></div>
                         <div class="text-sm"><label for="month-filter" class="font-medium text-gray-600">Month:</label><select id="month-filter" class="p-2 border rounded-md bg-white"></select></div>
                         <div class="text-sm"><label for="week-filter" class="font-medium text-gray-600">Week:</label><select id="week-filter" class="p-2 border rounded-md bg-white"></select></div>
                         <div class="text-sm"><label for="working-hours" class="font-medium text-gray-600">Weekly Hours:</label><input type="number" id="working-hours" value="40" class="w-20 p-2 border rounded-md text-center"></div>
-                        <button onclick="calculateUtilization()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Calculate</button>
                     </div>
                 </div>
                 <div id="utilization-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
@@ -147,21 +146,15 @@
             const months = new Set();
             const weeks = new Set();
 
-            const selectedYear = yearFilter.value;
-            const selectedMonth = monthFilter.value;
-
             activitiesCache.forEach(activity => {
                 if (!activity.date) return;
                 const date = new Date(activity.date);
-                const year = date.getFullYear();
-                years.add(year);
-
-                if (selectedYear === 'all' || year.toString() === selectedYear) {
-                    const month = date.getMonth(); // 0-11
-                    months.add(month);
-                    if (selectedMonth === 'all' || month.toString() === selectedMonth) {
-                        weeks.add(activity.week);
-                    }
+                if (isNaN(date.getTime())) return;
+                
+                years.add(date.getFullYear());
+                months.add(date.getMonth());
+                if (activity.week) {
+                    weeks.add(activity.week);
                 }
             });
 
@@ -173,7 +166,11 @@
                 Array.from(options).sort((a,b) => a-b).forEach(opt => {
                     select.innerHTML += `<option value="${opt}">${isMonth ? monthNames[opt] : opt}</option>`;
                 });
-                select.value = currentValue;
+                if(Array.from(select.options).some(o => o.value === currentValue)) {
+                    select.value = currentValue;
+                } else {
+                    select.value = 'all';
+                }
             };
 
             populate(yearFilter, years, 'All Years');
@@ -187,7 +184,12 @@
             const week = document.getElementById('week-filter').value;
 
             document.querySelectorAll('#activity-table tbody tr').forEach(row => {
-                const activityDate = new Date(row.cells[1].querySelector('input').value);
+                const activityDateStr = row.cells[1].querySelector('input').value;
+                if (!activityDateStr) {
+                    row.style.display = 'none';
+                    return;
+                }
+                const activityDate = new Date(activityDateStr);
                 const activityWeek = row.cells[0].textContent;
 
                 const yearMatch = year === 'all' || activityDate.getFullYear().toString() === year;
@@ -311,7 +313,49 @@
 
         // --- Firebase Initialization and Auth ---
         
-        async function seedInitialData(userId) { /* ... (same as before) ... */ }
+        async function seedInitialData(userId) {
+            const activitiesRef = collection(db, `users/${userId}/activities`);
+            const objectivesRef = collection(db, `users/${userId}/objectives`);
+
+            const objectivesSnapshot = await getDocs(query(objectivesRef));
+            if (objectivesSnapshot.empty) {
+                const batch = writeBatch(db);
+                
+                const sampleActivities = [
+                    { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8 },
+                    { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6 }
+                ];
+                sampleActivities.forEach(activity => {
+                    const docRef = doc(activitiesRef); 
+                    batch.set(docRef, activity);
+                });
+
+                const sampleObjectives = [
+                    { 
+                        title: "Drive High-Impact Project Delivery", 
+                        order: 0,
+                        krs: [
+                            { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Consistently billed over 34 hours per week." },
+                            { quarter: "Q3", result: "Successfully deliver all milestones for Project Alpha on or before the deadline.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." }
+                        ]
+                    },
+                    {
+                        title: "Enhance Professional Skills",
+                        order: 1,
+                        krs: [
+                            { quarter: "Q3", result: "Complete 2 professional development courses.", target: "2", actual: "1", notes: "Completed Data Viz course. Scheduled PM course." },
+                            { quarter: "Q4", result: "Mentor one junior team member.", target: "1", actual: "0", notes: "Scheduled first session with Alex." }
+                        ]
+                    }
+                ];
+                sampleObjectives.forEach(obj => {
+                    const docRef = doc(objectivesRef);
+                    batch.set(docRef, obj);
+                });
+
+                await batch.commit();
+            }
+        }
 
         async function initialize() {
             try {
@@ -322,14 +366,8 @@
                 // Programmatic event listeners
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
-                document.getElementById('year-filter').addEventListener('change', () => {
-                    populateDateFilters();
-                    filterActivities();
-                });
-                document.getElementById('month-filter').addEventListener('change', () => {
-                    populateDateFilters();
-                    filterActivities();
-                });
+                document.getElementById('year-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
+                document.getElementById('month-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
                 document.getElementById('week-filter').addEventListener('change', filterActivities);
 
                 onAuthStateChanged(auth, async (user) => {
