@@ -86,7 +86,7 @@
         // --- Firebase SDK Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, collection, addDoc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, collection, addDoc, setDoc, deleteDoc, onSnapshot, query, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -314,20 +314,69 @@
         window.addObjective = () => addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], createdAt: new Date() });
         const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
         const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
-        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q1', result: '', target: '', actual: '', notes: '' }] });
+        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q3', result: '', target: '', actual: '', notes: '' }] });
         const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
 
         // --- Firebase Initialization and Auth ---
+        
+        async function seedInitialData(userId) {
+            const activitiesRef = collection(db, `users/${userId}/activities`);
+            const objectivesRef = collection(db, `users/${userId}/objectives`);
+
+            const activitiesSnapshot = await getDocs(query(activitiesRef));
+            if (activitiesSnapshot.empty) {
+                const batch = writeBatch(db);
+                
+                // Sample Activities
+                const sampleActivities = [
+                    { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
+                    { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
+                ];
+                sampleActivities.forEach(activity => {
+                    const docRef = doc(activitiesRef); 
+                    batch.set(docRef, activity);
+                });
+
+                // Sample Objectives
+                const sampleObjectives = [
+                    { 
+                        title: "Drive High-Impact Project Delivery", 
+                        createdAt: new Date(),
+                        krs: [
+                            { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Billed over 34 hours/week." },
+                            { quarter: "Q3", result: "Deliver Project Alpha milestones.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." }
+                        ]
+                    },
+                    {
+                        title: "Enhance Professional Skills",
+                        createdAt: new Date(),
+                        krs: [
+                            { quarter: "Q3", result: "Complete 2 dev courses.", target: "2", actual: "1", notes: "Completed Data Viz course." }
+                        ]
+                    }
+                ];
+                sampleObjectives.forEach(obj => {
+                    const docRef = doc(objectivesRef);
+                    batch.set(docRef, obj);
+                });
+
+                await batch.commit();
+            }
+        }
+
         async function initialize() {
             try {
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                onAuthStateChanged(auth, user => {
+                onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                         document.getElementById('userId').textContent = userId.substring(0, 8);
+                        
+                        await seedInitialData(userId);
+                        
                         document.getElementById('loader').style.display = 'none';
                         document.getElementById('app-content').classList.remove('hidden');
                         
@@ -343,7 +392,7 @@
                             calculateUtilization();
                         });
 
-                        const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("createdAt"));
+                        const objectivesQuery = query(collection(db, `users/${userId}/objectives`));
                         objectivesUnsubscribe = onSnapshot(objectivesQuery, snapshot => {
                             objectivesContainer.innerHTML = '';
                             snapshot.docs.forEach(renderObjectiveBlock);
