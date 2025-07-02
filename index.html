@@ -128,6 +128,24 @@
             event.currentTarget.classList.add('active');
         };
 
+        const showLogin = () => {
+            appContent.classList.add('hidden');
+            loader.style.display = 'none';
+            loginScreen.style.display = 'flex';
+        };
+
+        const showLoader = () => {
+            loginScreen.style.display = 'none';
+            appContent.classList.add('hidden');
+            loader.style.display = 'flex';
+        };
+
+        const showApp = () => {
+            loginScreen.style.display = 'none';
+            loader.style.display = 'none';
+            appContent.classList.remove('hidden');
+        };
+
         // --- Activity Tracker UI & Logic ---
         const activityTableBody = document.getElementById('activity-table').querySelector('tbody');
         
@@ -553,13 +571,9 @@
                     if (user) {
                         userId = user.uid;
                         document.getElementById('userName').textContent = user.displayName || 'User';
-                        loginScreen.style.display = 'none';
-                        loader.style.display = 'flex';
                         
+                        showLoader();
                         await seedInitialData(userId);
-                        
-                        loader.style.display = 'none';
-                        appContent.classList.remove('hidden');
                         
                         if (activitiesUnsubscribe) activitiesUnsubscribe();
                         if (objectivesUnsubscribe) objectivesUnsubscribe();
@@ -583,15 +597,14 @@
                             renderQuarterlySummaryCards();
                         });
 
+                        showApp();
+
                     } else {
                         if (activitiesUnsubscribe) activitiesUnsubscribe();
                         if (objectivesUnsubscribe) objectivesUnsubscribe();
                         activitiesCache = [];
                         objectivesCache = [];
-                        
-                        loader.style.display = 'none';
-                        appContent.classList.add('hidden');
-                        loginScreen.style.display = 'flex';
+                        showLogin();
                     }
                 });
 
