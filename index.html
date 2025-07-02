@@ -26,8 +26,18 @@
 </head>
 <body class="p-4 sm:p-6 md:p-8">
 
+    <!-- Login Screen -->
+    <div id="login-screen" class="fixed inset-0 bg-gray-100 z-50 flex flex-col justify-center items-center">
+        <h1 class="text-4xl font-bold text-gray-800 mb-2">My OKR Tracker</h1>
+        <p class="text-gray-600 mb-8">Please sign in to continue</p>
+        <button id="sign-in-btn" class="bg-white text-gray-700 font-semibold py-2 px-6 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 flex items-center">
+            <svg class="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#34A853" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#FBBC05" d="M24 48c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 41.258 16.227 48 24 48z"></path><path fill="#EA4335" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C44.438 36.372 48 30.656 48 24c0-1.341-.138-2.65-.389-3.917z"></path></svg>
+            Sign in with Google
+        </button>
+    </div>
+
     <!-- Loading Spinner -->
-    <div id="loader" class="fixed inset-0 bg-white bg-opacity-75 z-50 justify-center items-center">
+    <div id="loader" class="fixed inset-0 bg-white bg-opacity-75 z-50 justify-center items-center hidden">
         <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
     </div>
 
@@ -39,21 +49,18 @@
             </div>
             <div class="mt-4 sm:mt-0 text-right">
                 <span id="currentDate" class="text-sm text-gray-500 block"></span>
-                <div class="text-xs text-gray-400 mt-1">User ID: <span id="userId" class="font-mono"></span></div>
+                <div class="text-xs text-gray-400 mt-1">User: <span id="userName" class="font-semibold"></span></div>
+                <button id="sign-out-btn" class="text-xs text-indigo-600 hover:underline mt-1">Sign Out</button>
             </div>
         </div>
 
-        <!-- Tab Buttons -->
         <div class="border-b border-gray-200 mb-6">
             <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                 <button onclick="changeTab(event, 'activity')" class="tab-button active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg">Activity Tracker</button>
                 <button onclick="changeTab(event, 'summary')" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg">Quarterly Summary</button>
             </nav>
         </div>
-
-        <!-- Tab Content -->
         <div>
-            <!-- Activity Tracker Tab -->
             <div id="activity" class="tab-content active">
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Weekly Activity Log</h2>
@@ -67,25 +74,12 @@
                 <div id="utilization-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
                 <div class="table-container">
                     <table id="activity-table" class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th>Week</th>
-                                <th class="flex items-center">Date <span id="date-sort-btn" class="ml-2 sort-arrow">↓</span></th>
-                                <th>Project / Work-stream</th>
-                                <th>Action / Task Completed</th>
-                                <th>Status</th>
-                                <th>Total Hours</th>
-                                <th>Billable Hours</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
+                        <thead class="bg-gray-50"><tr><th>Week</th><th class="flex items-center">Date <span id="date-sort-btn" class="ml-2 sort-arrow">↓</span></th><th>Project / Work-stream</th><th>Action / Task Completed</th><th>Status</th><th>Total Hours</th><th>Billable Hours</th><th>Actions</th></tr></thead>
                         <tbody class="bg-white divide-y divide-gray-200"></tbody>
                     </table>
                 </div>
                 <button id="add-activity-row-btn" class="add-row-btn mt-4 bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-200"> + Add Activity Row </button>
             </div>
-
-            <!-- Quarterly Summary Tab -->
             <div id="summary" class="tab-content">
                  <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Quarterly Achievements Summary</h2>
@@ -101,7 +95,7 @@
     <script type="module">
         // --- Firebase SDK Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, addDoc, setDoc, deleteDoc, onSnapshot, query, getDocs, writeBatch, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
@@ -123,6 +117,9 @@
         let dateSortDirection = 'desc';
 
         // --- General UI ---
+        const loginScreen = document.getElementById('login-screen');
+        const loader = document.getElementById('loader');
+        const appContent = document.getElementById('app-content');
         document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         window.changeTab = (event, tabID) => {
             document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = "none");
@@ -450,7 +447,7 @@
 
         const addObjective = () => {
             const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order)) + 1 : 0;
-            addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], order: newOrder });
+            addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], order: newOrder, createdAt: new Date() });
         };
         const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
         const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
@@ -477,10 +474,12 @@
         // --- Firebase Initialization and Auth ---
         
         async function seedInitialData(userId) {
-            const activitiesRef = collection(db, `users/${userId}/activities`);
-            const activitiesSnapshot = await getDocs(query(activitiesRef));
-            if (activitiesSnapshot.empty) {
+            const objectivesRef = collection(db, `users/${userId}/objectives`);
+            const objectivesSnapshot = await getDocs(query(objectivesRef));
+            if (objectivesSnapshot.empty) {
                 const batch = writeBatch(db);
+                
+                const activitiesRef = collection(db, `users/${userId}/activities`);
                 const sampleActivities = [
                     { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
                     { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
@@ -488,17 +487,12 @@
                 sampleActivities.forEach(activity => {
                     batch.set(doc(activitiesRef), activity);
                 });
-                await batch.commit();
-            }
 
-            const objectivesRef = collection(db, `users/${userId}/objectives`);
-            const objectivesSnapshot = await getDocs(query(objectivesRef));
-            if (objectivesSnapshot.empty) {
-                const batch = writeBatch(db);
                 const sampleObjectives = [
                     { 
                         title: "Drive High-Impact Project Delivery", 
                         order: 0,
+                        createdAt: new Date(),
                         krs: [
                             { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Consistently billed over 34 hours per week." },
                             { quarter: "Q3", result: "Successfully deliver all milestones for Project Alpha on or before the deadline.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." }
@@ -507,6 +501,7 @@
                     {
                         title: "Enhance Professional Skills",
                         order: 1,
+                        createdAt: new Date(),
                         krs: [
                             { quarter: "Q3", result: "Complete 2 professional development courses.", target: "2", actual: "1", notes: "Completed Data Viz course. Scheduled PM course." },
                             { quarter: "Q4", result: "Mentor one junior team member.", target: "1", actual: "0", notes: "Scheduled first session with Alex." }
@@ -516,6 +511,7 @@
                 sampleObjectives.forEach(obj => {
                     batch.set(doc(objectivesRef), obj);
                 });
+
                 await batch.commit();
             }
         }
@@ -527,6 +523,8 @@
                 auth = getAuth(app);
 
                 // Programmatic event listeners
+                document.getElementById('sign-in-btn').addEventListener('click', signInWithGoogle);
+                document.getElementById('sign-out-btn').addEventListener('click', signOutUser);
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
@@ -537,12 +535,14 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        document.getElementById('userId').textContent = userId.substring(0, 8);
+                        document.getElementById('userName').textContent = user.displayName || 'User';
+                        loginScreen.style.display = 'none';
+                        loader.style.display = 'flex';
                         
                         await seedInitialData(userId);
                         
-                        document.getElementById('loader').style.display = 'none';
-                        document.getElementById('app-content').classList.remove('hidden');
+                        loader.style.display = 'none';
+                        appContent.classList.remove('hidden');
                         
                         if (activitiesUnsubscribe) activitiesUnsubscribe();
                         if (objectivesUnsubscribe) objectivesUnsubscribe();
@@ -567,16 +567,20 @@
                         });
 
                     } else {
-                        document.getElementById('loader').style.display = 'flex';
-                        document.getElementById('app-content').classList.add('hidden');
+                        if (activitiesUnsubscribe) activitiesUnsubscribe();
+                        if (objectivesUnsubscribe) objectivesUnsubscribe();
+                        activitiesCache = [];
+                        objectivesCache = [];
+                        
+                        loader.style.display = 'none';
+                        appContent.classList.add('hidden');
+                        loginScreen.style.display = 'flex';
                     }
                 });
 
-                await signInAnonymously(auth);
-
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                document.getElementById('loader').innerHTML = "Failed to load application. Check console for errors and ensure Firebase config is correct.";
+                loader.innerHTML = "Failed to load application. Check console for errors.";
             }
         }
 
