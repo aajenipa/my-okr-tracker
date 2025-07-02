@@ -13,8 +13,9 @@
         .tab-content.active { display: block; }
         [contenteditable="true"]:focus { outline: 2px solid #4f46e5; background-color: #fff; border-radius: 4px; }
         th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
-        th { background-color: #f9fafb; }
+        th { background-color: #f9fafb; font-weight: 600; }
         .table-container { overflow-x: auto; }
+        .add-row-btn { transition: all 0.2s ease-in-out; }
         .add-row-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .date-input { background-color: transparent; border: none; padding: 0; width: 100%; min-width: 130px; }
         .date-input:focus { outline: none; box-shadow: none; }
@@ -31,8 +32,8 @@
     <div id="app-content" class="max-w-7xl mx-auto bg-white p-6 rounded-2xl shadow-lg hidden">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
             <div>
-                <h1 class="text-3xl font-bold text-gray-800">My Live OKR Tracker</h1>
-                <p class="mt-1 text-gray-500">Your data is saved automatically to the cloud.</p>
+                <h1 class="text-3xl font-bold text-gray-800">My OKR Tracker</h1>
+                <p class="mt-1 text-gray-500">Track activities and summarize quarterly achievements.</p>
             </div>
             <div class="mt-4 sm:mt-0 text-right">
                 <span id="currentDate" class="text-sm text-gray-500 block"></span>
@@ -74,7 +75,7 @@
             <div id="summary" class="tab-content">
                  <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Quarterly Achievements Summary</h2>
-                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter:</label><select id="quarter-filter" onchange="filterSummaryByQuarter()" class="p-2 border rounded-md bg-white"></select></div>
+                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-filter" onchange="filterSummaryByQuarter()" class="p-2 border rounded-md bg-white"></select></div>
                  </div>
                  <div id="objectives-container" class="space-y-8"></div>
                  <button onclick="addObjective()" class="add-row-btn mt-6 bg-green-100 text-green-800 px-4 py-2 rounded-lg hover:bg-green-200">+ Add New Objective</button>
@@ -327,31 +328,32 @@
             if (activitiesSnapshot.empty) {
                 const batch = writeBatch(db);
                 
-                // Sample Activities
+                // Sample Activities from screenshot
                 const sampleActivities = [
-                    { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
-                    { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
+                    { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
+                    { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
                 ];
                 sampleActivities.forEach(activity => {
                     const docRef = doc(activitiesRef); 
                     batch.set(docRef, activity);
                 });
 
-                // Sample Objectives
+                // Sample Objectives from screenshot
                 const sampleObjectives = [
                     { 
                         title: "Drive High-Impact Project Delivery", 
                         createdAt: new Date(),
                         krs: [
                             { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Billed over 34 hours/week." },
-                            { quarter: "Q3", result: "Deliver Project Alpha milestones.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." }
+                            { quarter: "Q3", result: "Successfully deliver all milestones for Project Alpha on or before the deadline.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." }
                         ]
                     },
                     {
                         title: "Enhance Professional Skills",
                         createdAt: new Date(),
                         krs: [
-                            { quarter: "Q3", result: "Complete 2 dev courses.", target: "2", actual: "1", notes: "Completed Data Viz course." }
+                            { quarter: "Q3", result: "Complete 2 professional development courses.", target: "2", actual: "1", notes: "Completed Data Viz course. Scheduled PM course." },
+                            { quarter: "Q4", result: "Mentor one junior team member.", target: "1", actual: "0", notes: "Scheduled first session with Alex." }
                         ]
                     }
                 ];
