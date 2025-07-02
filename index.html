@@ -75,8 +75,9 @@
             <div id="summary" class="tab-content">
                  <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Quarterly Achievements Summary</h2>
-                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-filter" onchange="filterSummaryByQuarter()" class="p-2 border rounded-md bg-white"></select></div>
+                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-filter" onchange="handleQuarterFilterChange()" class="p-2 border rounded-md bg-white"></select></div>
                  </div>
+                 <div id="quarterly-utilization-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
                  <div id="objectives-container" class="space-y-8"></div>
                  <button onclick="addObjective()" class="add-row-btn mt-6 bg-green-100 text-green-800 px-4 py-2 rounded-lg hover:bg-green-200">+ Add New Objective</button>
             </div>
@@ -122,6 +123,13 @@
             const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
             const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
             return weekNo;
+        };
+        
+        const getQuarterFromWeek = (week) => {
+            if (week <= 13) return 'Q1';
+            if (week <= 26) return 'Q2';
+            if (week <= 39) return 'Q3';
+            return 'Q4';
         };
 
         const sortActivityTable = () => {
@@ -261,6 +269,42 @@
                 block.style.display = hasVisibleRows ? 'block' : 'none';
             });
         };
+        
+        window.calculateQuarterlySummaryStats = () => {
+            const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            const selectedQuarter = document.getElementById('quarter-filter').value;
+            const allRows = document.querySelectorAll('#activity-table tbody tr');
+            
+            let totalHoursSum = 0, billableHoursSum = 0;
+            const rowsToConsider = Array.from(allRows).filter(row => {
+                if (selectedQuarter === 'all') return true;
+                const week = parseInt(row.querySelector('.week')?.textContent.trim());
+                if (isNaN(week)) return false;
+                return getQuarterFromWeek(week) === selectedQuarter;
+            });
+
+            rowsToConsider.forEach(row => {
+                totalHoursSum += parseFloat(row.querySelector('.total-hours').textContent) || 0;
+                billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
+            });
+
+            const numWeeks = new Set(rowsToConsider.map(r => r.querySelector('.week')?.textContent.trim()).filter(Boolean)).size || 1;
+            const effectiveWorkingHours = workingHoursPerWeek * numWeeks;
+            const basedOnText = selectedQuarter === 'all' ? `Across all quarters` : `Across ${numWeeks} week(s) in ${selectedQuarter}`;
+            
+            const effectiveUtilization = (totalHoursSum > 0 && effectiveWorkingHours > 0) ? (totalHoursSum / effectiveWorkingHours) * 100 : 0;
+            const billableUtilization = (totalHoursSum > 0) ? (billableHoursSum / totalHoursSum) * 100 : 0;
+            
+            document.getElementById('quarterly-utilization-summary').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (${selectedQuarter})</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalHoursSum.toFixed(1)}</p></div>
+                <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
+                <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>`;
+        };
+
+        window.handleQuarterFilterChange = () => {
+            filterSummaryByQuarter();
+            calculateQuarterlySummaryStats();
+        };
 
         const renderObjectiveBlock = (doc) => {
             const data = doc.data();
@@ -328,7 +372,6 @@
             if (activitiesSnapshot.empty) {
                 const batch = writeBatch(db);
                 
-                // Sample Activities from screenshot
                 const sampleActivities = [
                     { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
                     { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
@@ -338,7 +381,6 @@
                     batch.set(docRef, activity);
                 });
 
-                // Sample Objectives from screenshot
                 const sampleObjectives = [
                     { 
                         title: "Drive High-Impact Project Delivery", 
@@ -392,6 +434,7 @@
                             sortActivityTable();
                             populateWeekFilter();
                             calculateUtilization();
+                            calculateQuarterlySummaryStats(); // Recalculate quarterly stats when activities change
                         });
 
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`));
@@ -401,6 +444,7 @@
                             populateQuarterFilter();
                             filterSummaryByQuarter();
                             updateProgress();
+                            calculateQuarterlySummaryStats(); // Recalculate quarterly stats when objectives change (quarters might be edited)
                         });
 
                     } else {
