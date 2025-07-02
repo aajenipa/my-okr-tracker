@@ -57,11 +57,10 @@
             <div id="activity" class="tab-content active">
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Weekly Activity Log</h2>
-                    <div class="flex items-center space-x-2 sm:space-x-4 flex-wrap">
-                        <div class="text-sm"><label for="year-filter" class="font-medium text-gray-600">Year:</label><select id="year-filter" class="p-2 border rounded-md bg-white"></select></div>
-                        <div class="text-sm"><label for="month-filter" class="font-medium text-gray-600">Month:</label><select id="month-filter" class="p-2 border rounded-md bg-white"></select></div>
-                        <div class="text-sm"><label for="week-filter" class="font-medium text-gray-600">Week:</label><select id="week-filter" class="p-2 border rounded-md bg-white"></select></div>
+                    <div class="flex items-center space-x-2 sm:space-x-4">
+                        <div class="text-sm"><label for="week-filter" class="font-medium text-gray-600">Filter:</label><select id="week-filter" onchange="calculateUtilization()" class="p-2 border rounded-md bg-white"></select></div>
                         <div class="text-sm"><label for="working-hours" class="font-medium text-gray-600">Weekly Hours:</label><input type="number" id="working-hours" value="40" class="w-20 p-2 border rounded-md text-center"></div>
+                        <button onclick="calculateUtilization()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Calculate</button>
                     </div>
                 </div>
                 <div id="utilization-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
@@ -107,8 +106,7 @@
         // --- App State ---
         let db, auth, userId;
         let activitiesUnsubscribe, objectivesUnsubscribe;
-        let objectivesCache = [];
-        let activitiesCache = [];
+        let objectivesCache = []; // Cache for reordering
 
         // --- General UI ---
         document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -137,87 +135,56 @@
             return 'Q4';
         };
 
-        const populateDateFilters = () => {
-            const yearFilter = document.getElementById('year-filter');
-            const monthFilter = document.getElementById('month-filter');
-            const weekFilter = document.getElementById('week-filter');
-
-            const years = new Set();
-            const months = new Set();
-            const weeks = new Set();
-
-            activitiesCache.forEach(activity => {
-                if (!activity.date) return;
-                const date = new Date(activity.date);
-                if (isNaN(date.getTime())) return;
-                
-                years.add(date.getFullYear());
-                months.add(date.getMonth());
-                if (activity.week) {
-                    weeks.add(activity.week);
-                }
+        const sortActivityTable = () => {
+            const tableBody = document.getElementById('activity-table').querySelector('tbody');
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                const weekA = parseInt(a.cells[0].textContent) || 0;
+                const weekB = parseInt(b.cells[0].textContent) || 0;
+                if (weekA !== weekB) return weekA - weekB;
+                const dateA = new Date(a.querySelector('.date-input').value);
+                const dateB = new Date(b.querySelector('.date-input').value);
+                if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+                return dateA - dateB;
             });
-
-            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-            const populate = (select, options, allLabel, isMonth = false) => {
-                const currentValue = select.value;
-                select.innerHTML = `<option value="all">${allLabel}</option>`;
-                Array.from(options).sort((a,b) => a-b).forEach(opt => {
-                    select.innerHTML += `<option value="${opt}">${isMonth ? monthNames[opt] : opt}</option>`;
-                });
-                if(Array.from(select.options).some(o => o.value === currentValue)) {
-                    select.value = currentValue;
-                } else {
-                    select.value = 'all';
-                }
-            };
-
-            populate(yearFilter, years, 'All Years');
-            populate(monthFilter, months, 'All Months', true);
-            populate(weekFilter, weeks, 'All Weeks');
-        };
-
-        const filterActivities = () => {
-            const year = document.getElementById('year-filter').value;
-            const month = document.getElementById('month-filter').value;
-            const week = document.getElementById('week-filter').value;
-
-            document.querySelectorAll('#activity-table tbody tr').forEach(row => {
-                const activityDateStr = row.cells[1].querySelector('input').value;
-                if (!activityDateStr) {
-                    row.style.display = 'none';
-                    return;
-                }
-                const activityDate = new Date(activityDateStr);
-                const activityWeek = row.cells[0].textContent;
-
-                const yearMatch = year === 'all' || activityDate.getFullYear().toString() === year;
-                const monthMatch = month === 'all' || activityDate.getMonth().toString() === month;
-                const weekMatch = week === 'all' || activityWeek === week;
-
-                row.style.display = (yearMatch && monthMatch && weekMatch) ? '' : 'none';
-            });
-            calculateUtilization();
+            rows.forEach(row => tableBody.appendChild(row));
         };
         
+        const populateWeekFilter = () => {
+            const weekCells = document.querySelectorAll('#activity-table .week');
+            const weekFilter = document.getElementById('week-filter');
+            const uniqueWeeks = new Set(Array.from(weekCells).map(cell => cell.textContent.trim()).filter(Boolean));
+            const currentSelection = weekFilter.value;
+            weekFilter.innerHTML = '<option value="all">All Weeks</option>';
+            Array.from(uniqueWeeks).sort((a, b) => a - b).forEach(week => {
+                weekFilter.innerHTML += `<option value="${week}">Week ${week}</option>`;
+            });
+            if (Array.from(weekFilter.options).some(opt => opt.value === currentSelection)) {
+                weekFilter.value = currentSelection;
+            }
+        };
+
         window.calculateUtilization = () => {
             const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            const selectedWeek = document.getElementById('week-filter').value;
+            const allRows = document.querySelectorAll('#activity-table tbody tr');
             let totalHoursSum = 0, billableHoursSum = 0;
-            const rowsToConsider = Array.from(document.querySelectorAll('#activity-table tbody tr')).filter(row => row.style.display !== 'none');
-            
+            const rowsToConsider = Array.from(allRows).filter(row => selectedWeek === 'all' || row.querySelector('.week')?.textContent.trim() === selectedWeek);
             rowsToConsider.forEach(row => {
                 totalHoursSum += parseFloat(row.querySelector('.total-hours').textContent) || 0;
                 billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
             });
-
-            const numWeeks = new Set(rowsToConsider.map(r => r.querySelector('.week')?.textContent.trim()).filter(Boolean)).size || 1;
-            const effectiveWorkingHours = workingHoursPerWeek * numWeeks;
-            const basedOnText = `Across ${numWeeks} week(s) in selection`;
-            
+            let effectiveWorkingHours, basedOnText;
+            if (selectedWeek === 'all') {
+                const numWeeks = new Set(rowsToConsider.map(r => r.querySelector('.week')?.textContent.trim()).filter(Boolean)).size || 1;
+                effectiveWorkingHours = workingHoursPerWeek * numWeeks;
+                basedOnText = `Across ${numWeeks} week(s)`;
+            } else {
+                effectiveWorkingHours = workingHoursPerWeek;
+                basedOnText = `Based on ${workingHoursPerWeek} hours for Week ${selectedWeek}`;
+            }
             const effectiveUtilization = (totalHoursSum > 0 && effectiveWorkingHours > 0) ? (totalHoursSum / effectiveWorkingHours) * 100 : 0;
             const billableUtilization = (totalHoursSum > 0) ? (billableHoursSum / totalHoursSum) * 100 : 0;
-            
             document.getElementById('utilization-summary').innerHTML = `
                 <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (Selection)</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalHoursSum.toFixed(1)}</p></div>
                 <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
@@ -257,7 +224,7 @@
 
         const addActivityRow = () => addDoc(collection(db, `users/${userId}/activities`), {
             date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), project: '', action: '', 
-            status: 'New', totalHours: 0, billableHours: 0
+            status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date()
         });
         const updateActivity = (id, data) => setDoc(doc(db, `users/${userId}/activities`, id), data, { merge: true });
         const deleteActivity = (id) => deleteDoc(doc(db, `users/${userId}/activities`, id));
@@ -265,27 +232,66 @@
         // --- Objectives UI & Logic ---
         const objectivesContainer = document.getElementById('objectives-container');
 
-        const updateProgress = () => { /* ... (same as before) ... */ };
-        const populateQuarterFilter = () => { /* ... (same as before) ... */ };
-        window.filterSummaryByQuarter = () => { /* ... (same as before) ... */ };
+        const updateProgress = () => {
+            document.querySelectorAll('.summary-table tbody tr').forEach(row => {
+                const target = parseFloat(row.cells[2].textContent.replace(/[^0-9.]/g, ''));
+                const actual = parseFloat(row.cells[3].textContent.replace(/[^0-9.]/g, ''));
+                const progressCell = row.cells[4];
+                if (!isNaN(target) && !isNaN(actual) && target > 0) {
+                    let progress = Math.min(100, Math.max(0, (actual / target) * 100));
+                    let colorClass = progress >= 75 ? 'bg-green-500' : progress >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+                    progressCell.innerHTML = `<div class="w-full bg-gray-200 rounded-full h-2.5"><div class="${colorClass} h-2.5 rounded-full" style="width: ${progress}%"></div></div><div class="text-xs text-center text-gray-600 mt-1">${progress.toFixed(0)}%</div>`;
+                } else {
+                    progressCell.innerHTML = '';
+                }
+            });
+        };
+        
+        const populateQuarterFilter = () => {
+            const quarterCells = document.querySelectorAll('#summary .quarter');
+            const quarterFilter = document.getElementById('quarter-filter');
+            const uniqueQuarters = new Set(Array.from(quarterCells).map(cell => cell.textContent.trim()).filter(Boolean));
+            const currentSelection = quarterFilter.value;
+            quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
+            Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
+            if (Array.from(quarterFilter.options).some(opt => opt.value === currentSelection)) quarterFilter.value = currentSelection;
+        };
+        
+        window.filterSummaryByQuarter = () => {
+            const selectedQuarter = document.getElementById('quarter-filter').value;
+            document.querySelectorAll('.objective-block').forEach(block => {
+                let hasVisibleRows = false;
+                block.querySelectorAll('tbody tr').forEach(row => {
+                    const rowQuarter = row.querySelector('.quarter')?.textContent.trim();
+                    if (selectedQuarter === 'all' || rowQuarter === selectedQuarter) {
+                        row.style.display = ''; hasVisibleRows = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                block.style.display = hasVisibleRows ? 'block' : 'none';
+            });
+        };
         
         window.calculateQuarterlySummaryStats = () => {
             const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
             const selectedQuarter = document.getElementById('quarter-filter').value;
+            const allRows = document.querySelectorAll('#activity-table tbody tr');
             
             let totalHoursSum = 0, billableHoursSum = 0;
-            const rowsToConsider = activitiesCache.filter(activity => {
-                if (!activity.week) return false;
+            const rowsToConsider = Array.from(allRows).filter(row => {
                 if (selectedQuarter === 'all') return true;
-                return getQuarterFromWeek(activity.week) === selectedQuarter;
+                const week = parseInt(row.querySelector('.week')?.textContent.trim());
+                if (isNaN(week)) return false;
+                return getQuarterFromWeek(week) === selectedQuarter;
             });
 
-            rowsToConsider.forEach(activity => {
-                totalHoursSum += parseFloat(activity.totalHours) || 0;
-                billableHoursSum += parseFloat(activity.billableHours) || 0;
+            rowsToConsider.forEach(row => {
+                totalHoursSum += parseFloat(row.querySelector('.total-hours').textContent) || 0;
+                billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
             });
 
-            const numWeeks = new Set(rowsToConsider.map(r => r.week)).size || 1;
+            const numWeeks = new Set(rowsToConsider.map(r => r.querySelector('.week')?.textContent.trim()).filter(Boolean)).size || 1;
             const effectiveWorkingHours = workingHoursPerWeek * numWeeks;
             const basedOnText = selectedQuarter === 'all' ? `Across all quarters` : `Across ${numWeeks} week(s) in ${selectedQuarter}`;
             
@@ -303,20 +309,95 @@
             calculateQuarterlySummaryStats();
         };
 
-        const renderObjectiveBlock = (doc, index, total) => { /* ... (same as before) ... */ };
-        const addObjective = () => { /* ... (same as before) ... */ };
+        const renderObjectiveBlock = (doc, index, total) => {
+            const data = doc.data();
+            let block = objectivesContainer.querySelector(`[data-id="${doc.id}"]`);
+            if (!block) {
+                block = document.createElement('div');
+                block.className = 'objective-block';
+                objectivesContainer.appendChild(block);
+            }
+            block.dataset.id = doc.id;
+            
+            const krsHTML = (data.krs || []).map((kr, i) => `
+                <tr data-index="${i}">
+                    <td contenteditable="true" class="quarter">${kr.quarter || ''}</td>
+                    <td contenteditable="true">${kr.result || ''}</td>
+                    <td contenteditable="true">${kr.target || ''}</td>
+                    <td contenteditable="true" class="actual">${kr.actual || ''}</td>
+                    <td class="progress"></td>
+                    <td contenteditable="true">${kr.notes || ''}</td>
+                    <td class="text-center"><button class="delete-kr-btn text-red-500 text-xs">Delete</button></td>
+                </tr>`).join('');
+
+            block.innerHTML = `
+                <div class="bg-gray-100 p-4 rounded-lg flex justify-between items-center">
+                    <div class="flex items-center">
+                        <div class="flex flex-col mr-4">
+                            ${index > 0 ? `<svg class="control-arrow h-5 w-5 text-gray-500 move-up" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>` : `<div class="h-5 w-5"></div>`}
+                            ${index < total - 1 ? `<svg class="control-arrow h-5 w-5 text-gray-500 move-down" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>` : `<div class="h-5 w-5"></div>`}
+                        </div>
+                        <h3 contenteditable="true" class="font-bold text-lg text-gray-800">${data.title}</h3>
+                    </div>
+                    <button class="delete-objective-btn text-red-500 text-xs hover:underline">Delete Objective</button>
+                </div>
+                <div class="table-container mt-2">
+                    <table class="min-w-full summary-table">
+                        <thead class="bg-gray-50"><tr><th>Quarter</th><th>Key Result</th><th>Target</th><th>Actual</th><th>Progress</th><th>Key Achievements & Notes</th><th>Actions</th></tr></thead>
+                        <tbody>${krsHTML}</tbody>
+                    </table>
+                    <button class="add-kr-btn mt-2 bg-gray-100 text-xs">+ Add Key Result</button>
+                </div>`;
+            
+            block.querySelector('h3').addEventListener('blur', (e) => updateObjective(doc.id, { title: e.target.textContent }));
+            block.querySelector('.delete-objective-btn').addEventListener('click', () => deleteObjective(doc.id));
+            block.querySelector('.add-kr-btn').addEventListener('click', () => addKR(doc.id, data.krs || []));
+            block.querySelectorAll('tbody tr').forEach(row => {
+                const i = parseInt(row.dataset.index);
+                row.querySelectorAll('[contenteditable]').forEach((cell, j) => {
+                    cell.addEventListener('blur', (e) => {
+                        const field = ['quarter', 'result', 'target', 'actual', 'notes'][j];
+                        const krs = data.krs || [];
+                        krs[i][field] = e.target.textContent;
+                        updateObjective(doc.id, { krs });
+                    });
+                });
+                row.querySelector('.delete-kr-btn').addEventListener('click', () => deleteKR(doc.id, data.krs || [], i));
+            });
+            if (block.querySelector('.move-up')) block.querySelector('.move-up').addEventListener('click', () => moveObjective(index, 'up'));
+            if (block.querySelector('.move-down')) block.querySelector('.move-down').addEventListener('click', () => moveObjective(index, 'down'));
+        };
+
+        const addObjective = () => {
+            const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order)) + 1 : 0;
+            addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], order: newOrder });
+        };
         const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
         const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
         const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q3', result: '', target: '', actual: '', notes: '' }] });
         const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
-        const moveObjective = async (index, direction) => { /* ... (same as before) ... */ };
+        
+        const moveObjective = async (index, direction) => {
+            const batch = writeBatch(db);
+            const currentObj = objectivesCache[index];
+            const swapIndex = direction === 'up' ? index - 1 : index + 1;
+            const swapObj = objectivesCache[swapIndex];
+
+            if (swapObj) {
+                const currentOrder = currentObj.data().order;
+                const swapOrder = swapObj.data().order;
+                
+                batch.update(doc(db, `users/${userId}/objectives`, currentObj.id), { order: swapOrder });
+                batch.update(doc(db, `users/${userId}/objectives`, swapObj.id), { order: currentOrder });
+                
+                await batch.commit();
+            }
+        };
 
         // --- Firebase Initialization and Auth ---
         
         async function seedInitialData(userId) {
-            const activitiesRef = collection(db, `users/${userId}/activities`);
             const objectivesRef = collection(db, `users/${userId}/objectives`);
-
             const objectivesSnapshot = await getDocs(query(objectivesRef));
             if (objectivesSnapshot.empty) {
                 const batch = writeBatch(db);
@@ -326,7 +407,7 @@
                     { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6 }
                 ];
                 sampleActivities.forEach(activity => {
-                    const docRef = doc(activitiesRef); 
+                    const docRef = doc(collection(db, `users/${userId}/activities`)); 
                     batch.set(docRef, activity);
                 });
 
@@ -366,9 +447,6 @@
                 // Programmatic event listeners
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
-                document.getElementById('year-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
-                document.getElementById('month-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
-                document.getElementById('week-filter').addEventListener('change', filterActivities);
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -385,17 +463,17 @@
 
                         const activitiesQuery = query(collection(db, `users/${userId}/activities`));
                         activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
-                            activitiesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             activityTableBody.innerHTML = '';
-                            activitiesCache.forEach(activityDoc => renderActivityRow({ id: activityDoc.id, data: () => activityDoc }));
-                            populateDateFilters();
-                            filterActivities();
+                            snapshot.docs.forEach(renderActivityRow);
+                            sortActivityTable();
+                            populateWeekFilter();
+                            calculateUtilization();
                             calculateQuarterlySummaryStats();
                         });
 
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
                         objectivesUnsubscribe = onSnapshot(objectivesQuery, snapshot => {
-                            objectivesCache = snapshot.docs;
+                            objectivesCache = snapshot.docs; // Cache for reordering
                             objectivesContainer.innerHTML = '';
                             snapshot.docs.forEach((doc, index) => renderObjectiveBlock(doc, index, snapshot.docs.length));
                             populateQuarterFilter();
