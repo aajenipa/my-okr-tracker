@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live OKR Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .tab-button.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        [contenteditable="true"]:focus { outline: 2px solid #4f46e5; background-color: #fff; border-radius: 4px; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
+        th { background-color: #f9fafb; }
+        .table-container { overflow-x: auto; }
+        .add-row-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .date-input { background-color: transparent; border: none; padding: 0; width: 100%; min-width: 130px; }
+        .date-input:focus { outline: none; box-shadow: none; }
+        #loader { display: flex; }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8">
+
+    <!-- Loading Spinner -->
+    <div id="loader" class="fixed inset-0 bg-white bg-opacity-75 z-50 justify-center items-center">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+    </div>
+
+    <div id="app-content" class="max-w-7xl mx-auto bg-white p-6 rounded-2xl shadow-lg hidden">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">My Live OKR Tracker</h1>
+                <p class="mt-1 text-gray-500">Your data is saved automatically to the cloud.</p>
+            </div>
+            <div class="mt-4 sm:mt-0 text-right">
+                <span id="currentDate" class="text-sm text-gray-500 block"></span>
+                <div class="text-xs text-gray-400 mt-1">User ID: <span id="userId" class="font-mono"></span></div>
+            </div>
+        </div>
+
+        <!-- Tab Buttons -->
+        <div class="border-b border-gray-200 mb-6">
+            <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                <button onclick="changeTab(event, 'activity')" class="tab-button active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg">Activity Tracker</button>
+                <button onclick="changeTab(event, 'summary')" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg">Quarterly Summary</button>
+            </nav>
+        </div>
+
+        <!-- Tab Content -->
+        <div>
+            <!-- Activity Tracker Tab -->
+            <div id="activity" class="tab-content active">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                    <h2 class="text-xl font-semibold text-gray-700">Weekly Activity Log</h2>
+                    <div class="flex items-center space-x-2 sm:space-x-4">
+                        <div class="text-sm"><label for="week-filter" class="font-medium text-gray-600">Filter:</label><select id="week-filter" onchange="calculateUtilization()" class="p-2 border rounded-md bg-white"></select></div>
+                        <div class="text-sm"><label for="working-hours" class="font-medium text-gray-600">Weekly Hours:</label><input type="number" id="working-hours" value="40" class="w-20 p-2 border rounded-md text-center"></div>
+                        <button onclick="calculateUtilization()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Calculate</button>
+                    </div>
+                </div>
+                <div id="utilization-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
+                <div class="table-container">
+                    <table id="activity-table" class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50"><tr><th>Week</th><th>Date</th><th>Project / Work-stream</th><th>Action / Task Completed</th><th>Status</th><th>Total Hours</th><th>Billable Hours</th><th>Actions</th></tr></thead>
+                        <tbody class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+                <button onclick="addActivityRow()" class="add-row-btn mt-4 bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-200"> + Add Activity Row </button>
+            </div>
+
+            <!-- Quarterly Summary Tab -->
+            <div id="summary" class="tab-content">
+                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                    <h2 class="text-xl font-semibold text-gray-700">Quarterly Achievements Summary</h2>
+                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter:</label><select id="quarter-filter" onchange="filterSummaryByQuarter()" class="p-2 border rounded-md bg-white"></select></div>
+                 </div>
+                 <div id="objectives-container" class="space-y-8"></div>
+                 <button onclick="addObjective()" class="add-row-btn mt-6 bg-green-100 text-green-800 px-4 py-2 rounded-lg hover:bg-green-200">+ Add New Objective</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- Firebase SDK Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, addDoc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- App State ---
+        let db, auth, userId;
+        let activitiesUnsubscribe, objectivesUnsubscribe;
+
+        // --- General UI ---
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        window.changeTab = (event, tabID) => {
+            document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = "none");
+            document.querySelectorAll('.tab-button').forEach(tb => tb.classList.remove('active'));
+            document.getElementById(tabID).style.display = "block";
+            event.currentTarget.classList.add('active');
+        };
+
+        // --- Activity Tracker UI & Logic ---
+        const activityTableBody = document.getElementById('activity-table').querySelector('tbody');
+        
+        const getWeekNumber = (d) => {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return weekNo;
+        };
+
+        const sortActivityTable = () => {
+            const tableBody = document.getElementById('activity-table').querySelector('tbody');
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                const weekA = parseInt(a.cells[0].textContent) || 0;
+                const weekB = parseInt(b.cells[0].textContent) || 0;
+                if (weekA !== weekB) return weekA - weekB;
+                const dateA = new Date(a.querySelector('.date-input').value);
+                const dateB = new Date(b.querySelector('.date-input').value);
+                if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+                return dateA - dateB;
+            });
+            rows.forEach(row => tableBody.appendChild(row));
+        };
+        
+        const populateWeekFilter = () => {
+            const weekCells = document.querySelectorAll('#activity-table .week');
+            const weekFilter = document.getElementById('week-filter');
+            const uniqueWeeks = new Set(Array.from(weekCells).map(cell => cell.textContent.trim()).filter(Boolean));
+            const currentSelection = weekFilter.value;
+            weekFilter.innerHTML = '<option value="all">All Weeks</option>';
+            Array.from(uniqueWeeks).sort((a, b) => a - b).forEach(week => {
+                weekFilter.innerHTML += `<option value="${week}">Week ${week}</option>`;
+            });
+            if (Array.from(weekFilter.options).some(opt => opt.value === currentSelection)) {
+                weekFilter.value = currentSelection;
+            }
+        };
+
+        window.calculateUtilization = () => {
+            const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            const selectedWeek = document.getElementById('week-filter').value;
+            const allRows = document.querySelectorAll('#activity-table tbody tr');
+            let totalHoursSum = 0, billableHoursSum = 0;
+            const rowsToConsider = Array.from(allRows).filter(row => selectedWeek === 'all' || row.querySelector('.week')?.textContent.trim() === selectedWeek);
+            rowsToConsider.forEach(row => {
+                totalHoursSum += parseFloat(row.querySelector('.total-hours').textContent) || 0;
+                billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
+            });
+            let effectiveWorkingHours, basedOnText;
+            if (selectedWeek === 'all') {
+                const numWeeks = new Set(rowsToConsider.map(r => r.querySelector('.week')?.textContent.trim()).filter(Boolean)).size || 1;
+                effectiveWorkingHours = workingHoursPerWeek * numWeeks;
+                basedOnText = `Across ${numWeeks} week(s)`;
+            } else {
+                effectiveWorkingHours = workingHoursPerWeek;
+                basedOnText = `Based on ${workingHoursPerWeek} hours for Week ${selectedWeek}`;
+            }
+            const effectiveUtilization = (totalHoursSum > 0 && effectiveWorkingHours > 0) ? (totalHoursSum / effectiveWorkingHours) * 100 : 0;
+            const billableUtilization = (totalHoursSum > 0) ? (billableHoursSum / totalHoursSum) * 100 : 0;
+            document.getElementById('utilization-summary').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (Selection)</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalHoursSum.toFixed(1)}</p></div>
+                <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
+                <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>`;
+        };
+
+        const renderActivityRow = (doc) => {
+            const data = doc.data();
+            let row = activityTableBody.querySelector(`[data-id="${doc.id}"]`);
+            if (!row) {
+                row = activityTableBody.insertRow(-1);
+                row.dataset.id = doc.id;
+            }
+            row.innerHTML = `
+                <td class="week">${data.week || ''}</td>
+                <td><input type="date" value="${data.date || ''}" class="date-input"></td>
+                <td contenteditable="true">${data.project || ''}</td>
+                <td contenteditable="true">${data.action || ''}</td>
+                <td contenteditable="true">${data.status || 'In Progress'}</td>
+                <td contenteditable="true" class="total-hours">${data.totalHours || 0}</td>
+                <td contenteditable="true" class="billable-hours">${data.billableHours || 0}</td>
+                <td class="text-center"><button class="text-red-500 hover:text-red-700 text-xs">Delete</button></td>
+            `;
+            row.querySelector('.date-input').addEventListener('change', (e) => {
+                const date = new Date(e.target.value);
+                const week = isNaN(date.getTime()) ? '' : getWeekNumber(date);
+                updateActivity(doc.id, { date: e.target.value, week: week });
+            });
+            row.querySelectorAll('[contenteditable="true"]').forEach((cell, i) => {
+                cell.addEventListener('blur', (e) => {
+                    const field = ['project', 'action', 'status', 'totalHours', 'billableHours'][i];
+                    updateActivity(doc.id, { [field]: e.target.textContent });
+                });
+            });
+            row.querySelector('button').addEventListener('click', () => deleteActivity(doc.id));
+        };
+
+        window.addActivityRow = () => addDoc(collection(db, `artifacts/${appId}/users/${userId}/activities`), {
+            date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), project: '', action: '', 
+            status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date()
+        });
+        const updateActivity = (id, data) => setDoc(doc(db, `artifacts/${appId}/users/${userId}/activities`, id), data, { merge: true });
+        const deleteActivity = (id) => deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/activities`, id));
+        
+        // --- Objectives UI & Logic ---
+        const objectivesContainer = document.getElementById('objectives-container');
+
+        const updateProgress = () => {
+            document.querySelectorAll('.summary-table tbody tr').forEach(row => {
+                const target = parseFloat(row.cells[2].textContent.replace(/[^0-9.]/g, ''));
+                const actual = parseFloat(row.cells[3].textContent.replace(/[^0-9.]/g, ''));
+                const progressCell = row.cells[4];
+                if (!isNaN(target) && !isNaN(actual) && target > 0) {
+                    let progress = Math.min(100, Math.max(0, (actual / target) * 100));
+                    let colorClass = progress >= 75 ? 'bg-green-500' : progress >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+                    progressCell.innerHTML = `<div class="w-full bg-gray-200 rounded-full h-2.5"><div class="${colorClass} h-2.5 rounded-full" style="width: ${progress}%"></div></div><div class="text-xs text-center text-gray-600 mt-1">${progress.toFixed(0)}%</div>`;
+                } else {
+                    progressCell.innerHTML = '';
+                }
+            });
+        };
+        
+        const populateQuarterFilter = () => {
+            const quarterCells = document.querySelectorAll('#summary .quarter');
+            const quarterFilter = document.getElementById('quarter-filter');
+            const uniqueQuarters = new Set(Array.from(quarterCells).map(cell => cell.textContent.trim()).filter(Boolean));
+            const currentSelection = quarterFilter.value;
+            quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
+            Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
+            if (Array.from(quarterFilter.options).some(opt => opt.value === currentSelection)) quarterFilter.value = currentSelection;
+        };
+        
+        window.filterSummaryByQuarter = () => {
+            const selectedQuarter = document.getElementById('quarter-filter').value;
+            document.querySelectorAll('.objective-block').forEach(block => {
+                let hasVisibleRows = false;
+                block.querySelectorAll('tbody tr').forEach(row => {
+                    const rowQuarter = row.querySelector('.quarter')?.textContent.trim();
+                    if (selectedQuarter === 'all' || rowQuarter === selectedQuarter) {
+                        row.style.display = ''; hasVisibleRows = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                block.style.display = hasVisibleRows ? 'block' : 'none';
+            });
+        };
+
+        const renderObjectiveBlock = (doc) => {
+            const data = doc.data();
+            let block = objectivesContainer.querySelector(`[data-id="${doc.id}"]`);
+            if (!block) {
+                block = document.createElement('div');
+                block.className = 'objective-block';
+                block.dataset.id = doc.id;
+                objectivesContainer.appendChild(block);
+            }
+            const krsHTML = (data.krs || []).map((kr, index) => `
+                <tr data-index="${index}">
+                    <td contenteditable="true" class="quarter">${kr.quarter || ''}</td>
+                    <td contenteditable="true">${kr.result || ''}</td>
+                    <td contenteditable="true">${kr.target || ''}</td>
+                    <td contenteditable="true" class="actual">${kr.actual || ''}</td>
+                    <td class="progress"></td>
+                    <td contenteditable="true">${kr.notes || ''}</td>
+                    <td class="text-center"><button class="text-red-500 text-xs">Delete</button></td>
+                </tr>`).join('');
+
+            block.innerHTML = `
+                <div class="bg-gray-100 p-4 rounded-lg flex justify-between items-center">
+                    <h3 contenteditable="true" class="font-bold text-lg text-gray-800">${data.title}</h3>
+                    <button class="text-red-500 text-xs">Delete Objective</button>
+                </div>
+                <div class="table-container mt-2">
+                    <table class="min-w-full summary-table">
+                        <thead class="bg-gray-50"><tr><th>Quarter</th><th>Key Result</th><th>Target</th><th>Actual</th><th>Progress</th><th>Notes</th><th>Actions</th></tr></thead>
+                        <tbody>${krsHTML}</tbody>
+                    </table>
+                    <button class="add-row-btn mt-2 bg-gray-100 text-xs">+ Add Key Result</button>
+                </div>`;
+            
+            block.querySelector('h3').addEventListener('blur', (e) => updateObjective(doc.id, { title: e.target.textContent }));
+            block.querySelector('.text-red-500').addEventListener('click', () => deleteObjective(doc.id));
+            block.querySelector('.add-row-btn').addEventListener('click', () => addKR(doc.id, data.krs || []));
+            block.querySelectorAll('tbody tr').forEach(row => {
+                const index = parseInt(row.dataset.index);
+                row.querySelectorAll('[contenteditable]').forEach((cell, i) => {
+                    cell.addEventListener('blur', (e) => {
+                        const field = ['quarter', 'result', 'target', 'actual', 'notes'][i];
+                        const krs = data.krs || [];
+                        krs[index][field] = e.target.textContent;
+                        updateObjective(doc.id, { krs });
+                    });
+                });
+                row.querySelector('button').addEventListener('click', () => deleteKR(doc.id, data.krs || [], index));
+            });
+        };
+
+        window.addObjective = () => addDoc(collection(db, `artifacts/${appId}/users/${userId}/objectives`), { title: 'New Objective', krs: [], createdAt: new Date() });
+        const updateObjective = (id, data) => setDoc(doc(db, `artifacts/${appId}/users/${userId}/objectives`, id), data, { merge: true });
+        const deleteObjective = (id) => deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/objectives`, id));
+        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q1', result: '', target: '', actual: '', notes: '' }] });
+        const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
+
+        // --- Firebase Initialization and Auth ---
+        async function initialize() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                onAuthStateChanged(auth, user => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('userId').textContent = userId.substring(0, 8);
+                        document.getElementById('loader').style.display = 'none';
+                        document.getElementById('app-content').classList.remove('hidden');
+                        
+                        if (activitiesUnsubscribe) activitiesUnsubscribe();
+                        if (objectivesUnsubscribe) objectivesUnsubscribe();
+
+                        const activitiesQuery = query(collection(db, `artifacts/${appId}/users/${userId}/activities`));
+                        activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
+                            activityTableBody.innerHTML = '';
+                            snapshot.docs.forEach(renderActivityRow);
+                            sortActivityTable();
+                            populateWeekFilter();
+                            calculateUtilization();
+                        });
+
+                        const objectivesQuery = query(collection(db, `artifacts/${appId}/users/${userId}/objectives`), orderBy("createdAt"));
+                        objectivesUnsubscribe = onSnapshot(objectivesQuery, snapshot => {
+                            objectivesContainer.innerHTML = '';
+                            snapshot.docs.forEach(renderObjectiveBlock);
+                            populateQuarterFilter();
+                            filterSummaryByQuarter();
+                            updateProgress();
+                        });
+
+                    } else {
+                        document.getElementById('loader').style.display = 'flex';
+                        document.getElementById('app-content').classList.add('hidden');
+                    }
+                });
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                document.getElementById('loader').innerHTML = "Failed to load application.";
+            }
+        }
+
+        initialize();
+    </script>
+</body>
+</html>
