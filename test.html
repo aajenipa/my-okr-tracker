@@ -135,7 +135,7 @@
         let activitiesCache = [];
         let dateSortDirection = 'desc';
         let isSigningUp = false;
-        let summaryQuarterFilterInitialized = false; // --- [NEW] ---
+        let summaryQuarterFilterInitialized = false;
 
         // --- UI Elements ---
         const loginScreen = document.getElementById('login-screen');
@@ -438,13 +438,15 @@
                     if (kr.quarter) uniqueQuarters.add(kr.quarter);
                 });
             });
+            const currentSelection = quarterFilter.value;
             quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
             Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
-                
-            // Always "all" on load
+            
             if (!summaryQuarterFilterInitialized) {
                 quarterFilter.value = 'all';
                 summaryQuarterFilterInitialized = true;
+            } else {
+                 quarterFilter.value = Array.from(quarterFilter.options).some(opt => opt.value === currentSelection) ? currentSelection : 'all';
             }
         };
 
@@ -452,10 +454,9 @@
             const selectedQuarter = document.getElementById('quarter-summary-filter').value;
             document.querySelectorAll('.objective-block').forEach(block => {
                 let hasVisibleRows = false;
-                // Always show the objective table!
                 block.style.display = 'block';
-                block.querySelectorAll('tbody tr').forEach(row => {
-                    if (row.classList.contains('no-results-row')) return; // Skip placeholder row
+                const tbody = block.querySelector('tbody');
+                tbody.querySelectorAll('tr:not(.no-results-row)').forEach(row => {
                     const rowQuarter = row.querySelector('.quarter-select').value;
                     if (selectedQuarter === 'all' || rowQuarter === selectedQuarter) {
                         row.style.display = '';
@@ -465,11 +466,8 @@
                     }
                 });
 
-                const tbody = block.querySelector('tbody');
                 const placeholderRow = tbody.querySelector('.no-results-row');
-
                 if (!hasVisibleRows) {
-                    // If no visible rows, add a placeholder row if it doesn't exist
                     if (!placeholderRow) {
                         const tr = document.createElement('tr');
                         tr.className = 'no-results-row';
@@ -477,7 +475,6 @@
                         tbody.appendChild(tr);
                     }
                 } else {
-                    // Remove any previous placeholder row if it exists
                     if (placeholderRow) {
                         placeholderRow.remove();
                     }
@@ -574,8 +571,6 @@
                     </div>`;
                 objectivesContainer.appendChild(block);
             });
-            updateProgress();
-            filterSummaryByQuarter();
         };
         const addObjective = () => { const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0; addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [{ quarter: getQuarterFromDate(new Date()), result: '', target: '', actual: '', notes: '' }], order: newOrder, createdAt: new Date() }); };
         const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
@@ -743,13 +738,16 @@
                             filterActivities();
                             populateSummaryQuarterFilter();
                             renderQuarterlySummaryCards();
+                            filterSummaryByQuarter();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
                         objectivesUnsubscribe = onSnapshot(objectivesQuery, snapshot => {
                             objectivesCache = snapshot.docs;
                             renderObjectives();
+                            updateProgress();
                             populateSummaryQuarterFilter();
                             renderQuarterlySummaryCards();
+                            filterSummaryByQuarter();
                         });
                         showApp();
                     } else {
