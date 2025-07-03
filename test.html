@@ -305,7 +305,6 @@
             populate(quarterFilter, quarters, 'All Quarters', q => q);
             populate(monthFilter, months, 'All Months', m => monthNames[m]);
             
-            // Update week filter to show ranges
             populate(weekFilter, weeks, 'All Weeks', w => {
                 const yearToUse = selectedYear !== 'all' ? parseInt(selectedYear) : new Date().getFullYear();
                 const activityForYear = activitiesCache.find(a => a.week == w && new Date(a.date).getFullYear() === yearToUse);
@@ -326,7 +325,7 @@
                 const activityDateStr = row.querySelector('.date-input').value;
                 if (!activityDateStr) { row.style.display = 'none'; return; }
                 const activityDate = new Date(activityDateStr);
-                const activityWeek = row.dataset.week; // Use data attribute for original week number
+                const activityWeek = row.dataset.week; 
                 const activityQuarter = getQuarterFromWeek(parseInt(activityWeek));
 
                 const yearMatch = year === 'all' || activityDate.getUTCFullYear().toString() === year;
@@ -384,7 +383,7 @@
                 const data = activityDoc;
                 const row = activityTableBody.insertRow();
                 row.dataset.id = data.id;
-                row.dataset.week = data.week || ''; // Store original week number
+                row.dataset.week = data.week || ''; 
 
                 const weekNum = data.week || '';
                 let weekHtml = weekNum;
@@ -445,19 +444,41 @@
             quarterFilter.value = Array.from(quarterFilter.options).some(opt => opt.value === currentSelection) ? currentSelection : 'all';
         };
 
+        // --- [UPDATED] filterSummaryByQuarter function ---
         const filterSummaryByQuarter = () => {
             const selectedQuarter = document.getElementById('quarter-summary-filter').value;
             document.querySelectorAll('.objective-block').forEach(block => {
                 let hasVisibleRows = false;
+                // Always show the objective table!
+                block.style.display = 'block';
                 block.querySelectorAll('tbody tr').forEach(row => {
+                    if (row.classList.contains('no-results-row')) return; // Skip placeholder row
                     const rowQuarter = row.querySelector('.quarter-select').value;
                     if (selectedQuarter === 'all' || rowQuarter === selectedQuarter) {
-                        row.style.display = ''; hasVisibleRows = true;
+                        row.style.display = '';
+                        hasVisibleRows = true;
                     } else {
                         row.style.display = 'none';
                     }
                 });
-                block.style.display = hasVisibleRows ? 'block' : 'none';
+
+                const tbody = block.querySelector('tbody');
+                const placeholderRow = tbody.querySelector('.no-results-row');
+
+                if (!hasVisibleRows) {
+                    // If no visible rows, add a placeholder row if it doesn't exist
+                    if (!placeholderRow) {
+                        const tr = document.createElement('tr');
+                        tr.className = 'no-results-row';
+                        tr.innerHTML = `<td colspan="7" class="text-center text-gray-400 py-8">No Key Results for this selection.</td>`;
+                        tbody.appendChild(tr);
+                    }
+                } else {
+                    // Remove any previous placeholder row if it exists
+                    if (placeholderRow) {
+                        placeholderRow.remove();
+                    }
+                }
             });
         };
 
