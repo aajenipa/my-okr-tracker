@@ -522,7 +522,7 @@
         };
 
         const addObjective = () => {
-            const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order)) + 1 : 0;
+            const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0;
             addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], order: newOrder, createdAt: new Date() });
         };
         const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
@@ -607,8 +607,8 @@
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
-                document.getElementById('year-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
-                document.getElementById('month-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
+                document.getElementById('year-filter').addEventListener('change', filterActivities);
+                document.getElementById('month-filter').addEventListener('change', filterActivities);
                 document.getElementById('week-filter').addEventListener('change', filterActivities);
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
 
