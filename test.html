@@ -213,7 +213,6 @@
             const month = date.getMonth(); // 0-11
             if (month < 3) return 'Q1'; if (month < 6) return 'Q2'; if (month < 9) return 'Q3'; return 'Q4';
         };
-
         const populateDateFilters = () => {
             const yearFilter = document.getElementById('year-filter');
             const years = new Set();
@@ -230,7 +229,6 @@
             
             updateCascadingFilters();
         };
-
         const updateCascadingFilters = () => {
             const year = document.getElementById('year-filter').value;
             const quarters = new Set(), months = new Set(), weeks = new Set();
@@ -260,7 +258,6 @@
             populateMulti(monthFilter, months, m => monthNames[m]);
             populateMulti(weekFilter, weeks, w => `Week ${w}`);
         };
-
         const filterActivities = () => {
             const year = document.getElementById('year-filter').value;
             const quarters = quarterActivityFilter.getSelected();
@@ -283,7 +280,6 @@
             });
             calculateUtilization();
         };
-        
         const calculateUtilization = () => {
             const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
             let totalWorkedHours = 0, billableHoursSum = 0, totalTimeOffHours = 0;
@@ -316,7 +312,6 @@
                 <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
                 <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>`;
         };
-        
         const renderActivityTable = () => {
             activityTableBody.innerHTML = '';
             const sortedActivities = [...activitiesCache].sort((a, b) => {
@@ -518,6 +513,11 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
+                // Initialize Slim Select
+                quarterActivityFilter = new SlimSelect({ select: '#quarter-activity-filter', settings: { placeholderText: 'All Quarters' } });
+                monthFilter = new SlimSelect({ select: '#month-filter', settings: { placeholderText: 'All Months' } });
+                weekFilter = new SlimSelect({ select: '#week-filter', settings: { placeholderText: 'All Weeks' } });
+
                 // Event Delegation for dynamic content
                 document.body.addEventListener('click', (e) => {
                     const target = e.target;
@@ -599,8 +599,12 @@
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
+                document.getElementById('year-filter').addEventListener('change', () => { updateCascadingFilters(); filterActivities(); });
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
-                
+                quarterActivityFilter.onChange = filterActivities;
+                monthFilter.onChange = filterActivities;
+                weekFilter.onChange = filterActivities;
+
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
@@ -613,6 +617,7 @@
                         activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
                             activitiesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             renderActivityTable();
+                            populateDateFilters();
                             renderQuarterlySummaryCards();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
