@@ -163,28 +163,144 @@
         };
 
         // --- Authentication Functions ---
-        const signInWithGoogle = async () => { /* ... (same as before) ... */ };
+        const signInWithGoogle = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                const result = await signInWithPopup(auth, provider);
+                if (auth.currentUser?.isAnonymous) {
+                    const credential = GoogleAuthProvider.credentialFromResult(result);
+                    await linkWithCredential(auth.currentUser, credential);
+                }
+            } catch (error) {
+                authError.textContent = error.message;
+            }
+        };
         const signOutUser = () => signOut(auth);
-        const handleEmailAuth = async (event) => { /* ... (same as before) ... */ };
-        const toggleAuthForm = () => { /* ... (same as before) ... */ };
+        const handleEmailAuth = async (event) => {
+            event.preventDefault();
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            authError.textContent = '';
+            try {
+                if (isSigningUp) {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                } else {
+                    await signInWithEmailAndPassword(auth, email, password);
+                }
+            } catch (error) {
+                authError.textContent = error.message;
+            }
+        };
+        const toggleAuthForm = () => {
+            isSigningUp = !isSigningUp;
+            emailSigninBtn.classList.toggle('hidden');
+            emailSignupBtn.classList.toggle('hidden');
+            formToggleText.textContent = isSigningUp ? 'Already have an account?' : 'Need an account?';
+            formToggleBtn.textContent = isSigningUp ? 'Sign In' : 'Sign Up';
+            authError.textContent = '';
+        };
 
         // --- Activity Tracker Logic ---
-        const getWeekNumber = (d) => { /* ... (same as before) ... */ return 1; };
-        const getQuarterFromWeek = (week) => { /* ... (same as before) ... */ return 'Q1'; };
-        const populateDateFilters = () => { /* ... (same as before) ... */ };
-        const filterActivities = () => { /* ... (same as before) ... */ };
-        const calculateUtilization = () => { /* ... (same as before) ... */ };
-        const renderActivityTable = () => { /* ... (same as before) ... */ };
+        const getWeekNumber = (d) => {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        };
+        const getQuarterFromWeek = (week) => {
+            if (week <= 13) return 'Q1'; if (week <= 26) return 'Q2'; if (week <= 39) return 'Q3'; return 'Q4';
+        };
+        const populateDateFilters = () => {
+            const yearFilter = document.getElementById('year-filter');
+            const monthFilter = document.getElementById('month-filter');
+            const weekFilter = document.getElementById('week-filter');
+            const years = new Set(), months = new Set(), weeks = new Set();
+            activitiesCache.forEach(activity => {
+                if (!activity.date) return;
+                const date = new Date(activity.date);
+                if (isNaN(date.getTime())) return;
+                years.add(date.getUTCFullYear()); months.add(date.getUTCMonth());
+                if (activity.week) weeks.add(activity.week);
+            });
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            const populate = (select, options, allLabel, isMonth = false) => {
+                const currentValue = select.value;
+                select.innerHTML = `<option value="all">${allLabel}</option>`;
+                Array.from(options).sort((a,b) => a-b).forEach(opt => {
+                    select.innerHTML += `<option value="${opt}">${isMonth ? monthNames[opt] : opt}</option>`;
+                });
+                select.value = Array.from(select.options).some(o => o.value === currentValue) ? currentValue : 'all';
+            };
+            populate(yearFilter, years, 'All Years');
+            populate(monthFilter, months, 'All Months', true);
+            populate(weekFilter, weeks, 'All Weeks');
+        };
+        const filterActivities = () => {
+            const year = document.getElementById('year-filter').value;
+            const month = document.getElementById('month-filter').value;
+            const week = document.getElementById('week-filter').value;
+            document.querySelectorAll('#activity-table tbody tr').forEach(row => {
+                const activityDateStr = row.cells[1].querySelector('input').value;
+                if (!activityDateStr) { row.style.display = 'none'; return; }
+                const activityDate = new Date(activityDateStr);
+                const activityWeek = row.cells[0].textContent;
+                const yearMatch = year === 'all' || activityDate.getUTCFullYear().toString() === year;
+                const monthMatch = month === 'all' || activityDate.getUTCMonth().toString() === month;
+                const weekMatch = week === 'all' || activityWeek === week;
+                row.style.display = (yearMatch && monthMatch && weekMatch) ? '' : 'none';
+            });
+            calculateUtilization();
+        };
+        const calculateUtilization = () => {
+            const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            let totalHoursSum = 0, billableHoursSum = 0;
+            const rowsToConsider = Array.from(document.querySelectorAll('#activity-table tbody tr')).filter(row => row.style.display !== 'none');
+            rowsToConsider.forEach(row => {
+                totalHoursSum += parseFloat(row.querySelector('.total-hours').textContent) || 0;
+                billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
+            });
+            const numWeeks = new Set(rowsToConsider.map(r => r.querySelector('.week')?.textContent.trim()).filter(Boolean)).size || 1;
+            const effectiveWorkingHours = workingHoursPerWeek * numWeeks;
+            const basedOnText = `Across ${numWeeks} week(s) in selection`;
+            const effectiveUtilization = (totalHoursSum > 0 && effectiveWorkingHours > 0) ? (totalHoursSum / effectiveWorkingHours) * 100 : 0;
+            const billableUtilization = (totalHoursSum > 0) ? (billableHoursSum / totalHoursSum) * 100 : 0;
+            document.getElementById('utilization-summary').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (Selection)</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalHoursSum.toFixed(1)}</p></div>
+                <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
+                <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>`;
+        };
+        const renderActivityTable = () => {
+            activityTableBody.innerHTML = '';
+            const sortedActivities = [...activitiesCache].sort((a, b) => {
+                const dateA = new Date(a.date); const dateB = new Date(b.date);
+                return dateSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+            });
+            sortedActivities.forEach(activityDoc => {
+                const data = activityDoc;
+                const row = activityTableBody.insertRow();
+                row.dataset.id = data.id;
+                row.innerHTML = `
+                    <td class="week">${data.week || ''}</td>
+                    <td><input type="date" value="${data.date || ''}" class="date-input"></td>
+                    <td contenteditable="true">${data.project || ''}</td>
+                    <td contenteditable="true">${data.action || ''}</td>
+                    <td contenteditable="true">${data.status || 'In Progress'}</td>
+                    <td contenteditable="true" class="total-hours">${data.totalHours || 0}</td>
+                    <td contenteditable="true" class="billable-hours">${data.billableHours || 0}</td>
+                    <td class="text-center"><button class="text-red-500 hover:text-red-700 text-xs">Delete</button></td>`;
+            });
+            filterActivities();
+        };
         const toggleDateSort = () => { dateSortDirection = dateSortDirection === 'desc' ? 'asc' : 'desc'; document.getElementById('date-sort-btn').innerHTML = dateSortDirection === 'desc' ? '↓' : '↑'; renderActivityTable(); };
         const addActivityRow = () => addDoc(collection(db, `users/${userId}/activities`), { date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), project: '', action: '', status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date() });
         const updateActivity = (id, data) => setDoc(doc(db, `users/${userId}/activities`, id), data, { merge: true });
         const deleteActivity = (id) => deleteDoc(doc(db, `users/${userId}/activities`, id));
         
         // --- Objectives Logic ---
-        const updateProgress = () => { /* ... (same as before) ... */ };
-        const populateQuarterFilter = () => { /* ... (same as before) ... */ };
-        const filterSummaryByQuarter = () => { /* ... (same as before) ... */ };
-        const renderQuarterlySummaryCards = () => { /* ... (same as before) ... */ };
+        const updateProgress = () => { /* ... */ };
+        const populateQuarterFilter = () => { /* ... */ };
+        const filterSummaryByQuarter = () => { /* ... */ };
+        const renderQuarterlySummaryCards = () => { /* ... */ };
         const handleQuarterFilterChange = () => { filterSummaryByQuarter(); renderQuarterlySummaryCards(); };
         const addObjective = () => {
             const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0;
@@ -194,7 +310,7 @@
         const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
         const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q3', result: '', target: '', actual: '', notes: '' }] });
         const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
-        const moveObjective = async (index, direction) => { /* ... (same as before) ... */ };
+        const moveObjective = async (index, direction) => { /* ... */ };
 
         const renderObjectives = () => {
             objectivesContainer.innerHTML = '';
@@ -250,44 +366,55 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Event Listeners using Delegation
-                objectivesContainer.addEventListener('click', (e) => {
+                // Event Delegation for dynamic content
+                document.body.addEventListener('click', (e) => {
                     const target = e.target;
-                    const block = target.closest('.objective-block');
-                    if (!block) return;
-                    const docId = block.dataset.id;
-                    const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                    const objectiveBlock = target.closest('.objective-block');
+                    const activityRow = target.closest('#activity-table tbody tr');
 
-                    if (target.classList.contains('delete-objective-btn')) deleteObjective(docId);
-                    else if (target.classList.contains('add-kr-btn')) addKR(docId, objectivesCache[objIndex].data().krs || []);
-                    else if (target.closest('.move-up')) moveObjective(objIndex, 'up');
-                    else if (target.closest('.move-down')) moveObjective(objIndex, 'down');
-                    else if (target.classList.contains('delete-kr-btn')) {
-                        const krIndex = parseInt(target.closest('tr').dataset.index);
-                        deleteKR(docId, objectivesCache[objIndex].data().krs || [], krIndex);
+                    if (objectiveBlock) {
+                        const docId = objectiveBlock.dataset.id;
+                        const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        if (target.classList.contains('delete-objective-btn')) deleteObjective(docId);
+                        else if (target.classList.contains('add-kr-btn')) addKR(docId, objectivesCache[objIndex].data().krs || []);
+                        else if (target.closest('.move-up')) moveObjective(objIndex, 'up');
+                        else if (target.closest('.move-down')) moveObjective(objIndex, 'down');
+                        else if (target.classList.contains('delete-kr-btn')) {
+                            const krIndex = parseInt(target.closest('tr').dataset.index);
+                            deleteKR(docId, objectivesCache[objIndex].data().krs || [], krIndex);
+                        }
+                    } else if (activityRow && target.textContent === 'Delete') {
+                        deleteActivity(activityRow.dataset.id);
                     }
                 });
 
-                objectivesContainer.addEventListener('blur', (e) => {
+                document.body.addEventListener('blur', (e) => {
                     const target = e.target;
-                    const block = target.closest('.objective-block');
-                    if (!block) return;
-                    const docId = block.dataset.id;
-                    const objIndex = objectivesCache.findIndex(d => d.id === docId);
-                    
-                    if (target.tagName === 'H3') {
-                        updateObjective(docId, { title: target.textContent });
-                    } else if (target.closest('tr')) {
-                        const krIndex = parseInt(target.closest('tr').dataset.index);
-                        const cellIndex = target.closest('td').cellIndex;
-                        const field = ['quarter', 'result', 'target', 'actual', 'notes'][cellIndex];
-                        const krs = objectivesCache[objIndex].data().krs || [];
-                        krs[krIndex][field] = target.textContent;
-                        updateObjective(docId, { krs });
-                    }
-                }, true); // Use capture phase for blur events
+                    const objectiveBlock = target.closest('.objective-block');
+                    const activityRow = target.closest('#activity-table tbody tr');
 
-                // Other Listeners
+                    if (objectiveBlock) {
+                        const docId = objectiveBlock.dataset.id;
+                        const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        if (target.tagName === 'H3') {
+                            updateObjective(docId, { title: target.textContent });
+                        } else if (target.closest('tr')) {
+                            const krIndex = parseInt(target.closest('tr').dataset.index);
+                            const cellIndex = target.closest('td').cellIndex;
+                            const field = ['quarter', 'result', 'target', 'actual', 'notes'][cellIndex];
+                            const krs = objectivesCache[objIndex].data().krs || [];
+                            krs[krIndex][field] = target.textContent;
+                            updateObjective(docId, { krs });
+                        }
+                    } else if (activityRow) {
+                        const docId = activityRow.dataset.id;
+                        const cellIndex = target.closest('td').cellIndex;
+                        const field = ['project', 'action', 'status', 'totalHours', 'billableHours'][cellIndex - 2];
+                        if (field) updateActivity(docId, { [field]: target.textContent });
+                    }
+                }, true);
+
+                // Static Listeners
                 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
                 document.getElementById('guest-signin-btn').addEventListener('click', () => signInAnonymously(auth));
                 document.getElementById('sign-out-btn').addEventListener('click', signOutUser);
