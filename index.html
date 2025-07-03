@@ -158,6 +158,13 @@
         const showLoader = () => { loginScreen.style.display = 'none'; loader.style.display = 'flex'; appContent.classList.add('hidden'); };
         const showApp = () => { loginScreen.style.display = 'none'; loader.style.display = 'none'; appContent.classList.remove('hidden'); };
         
+        window.changeTab = (event, tabID) => {
+            document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = "none");
+            document.querySelectorAll('.tab-button').forEach(tb => tb.classList.remove('active'));
+            document.getElementById(tabID).style.display = "block";
+            event.currentTarget.classList.add('active');
+        };
+
         // --- Authentication Functions ---
         const signInWithGoogle = async () => {
             const provider = new GoogleAuthProvider();
@@ -592,17 +599,6 @@
             }
         }
         
-        const signInWithGoogle = async () => {
-            const provider = new GoogleAuthProvider();
-            try {
-                await signInWithPopup(auth, provider);
-            } catch (error) {
-                authError.textContent = error.message;
-            }
-        };
-
-        const signOutUser = () => signOut(auth);
-
         async function initialize() {
             try {
                 const app = initializeApp(firebaseConfig);
@@ -610,8 +606,11 @@
                 auth = getAuth(app);
 
                 // Programmatic event listeners
-                document.getElementById('sign-in-btn').addEventListener('click', signInWithGoogle);
+                document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+                document.getElementById('guest-signin-btn').addEventListener('click', () => signInAnonymously(auth));
                 document.getElementById('sign-out-btn').addEventListener('click', signOutUser);
+                emailForm.addEventListener('submit', handleEmailAuth);
+                formToggleBtn.addEventListener('click', toggleAuthForm);
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
@@ -622,7 +621,7 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        document.getElementById('userName').textContent = user.displayName || 'User';
+                        document.getElementById('userName').textContent = user.displayName || (user.isAnonymous ? 'Guest' : user.email);
                         
                         showLoader();
                         await seedInitialData(userId);
