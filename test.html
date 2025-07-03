@@ -26,7 +26,6 @@
 </head>
 <body class="p-4 sm:p-6 md:p-8">
 
-    <!-- Login Screen -->
     <div id="login-screen" class="fixed inset-0 bg-gray-100 z-50 flex flex-col justify-center items-center p-4">
         <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg">
             <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">My OKR Tracker</h1>
@@ -54,7 +53,6 @@
         </div>
     </div>
 
-    <!-- Loading Spinner -->
     <div id="loader" class="fixed inset-0 bg-white bg-opacity-75 z-50 justify-center items-center hidden">
         <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
     </div>
@@ -194,7 +192,6 @@
         };
 
         // --- Activity Tracker Logic ---
-        let filtersInitialized = false;
         const getWeekNumber = (d) => {
             d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
             d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -255,12 +252,8 @@
             populate(monthFilter, months, 'All Months', m => monthNames[m]);
             populate(weekFilter, weeks, 'All Weeks', w => `Week ${w}`);
 
-            // Only force the filters to 'all' the first time
             if (!filtersInitialized) {
-                yearFilter.value = 'all';
-                quarterFilter.value = 'all';
-                monthFilter.value = 'all';
-                weekFilter.value = 'all';
+                filterActivities();
                 filtersInitialized = true;
             }
         };
@@ -342,7 +335,6 @@
                     <td contenteditable="true" class="billable-hours">${data.billableHours || 0}</td>
                     <td class="text-center"><button class="delete-activity-btn text-red-500 hover:text-red-700 text-xs">Delete</button></td>`;
             });
-                filterActivities(); // <--- ADD THIS LINE!
         };
         const toggleDateSort = () => { dateSortDirection = dateSortDirection === 'desc' ? 'asc' : 'desc'; document.getElementById('date-sort-btn').innerHTML = dateSortDirection === 'desc' ? '↓' : '↑'; renderActivityTable(); };
         const addActivityRow = () => addDoc(collection(db, `users/${userId}/activities`), { date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), type: 'Work', project: '', action: '', status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date() });
@@ -623,6 +615,7 @@
                             activitiesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             renderActivityTable();
                             populateDateFilters();
+                            filterActivities(); // <-- Call filter after populating
                             renderQuarterlySummaryCards();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
