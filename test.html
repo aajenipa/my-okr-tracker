@@ -193,27 +193,50 @@
             document.getElementById('auth-error').textContent = '';
         };
 
-        // --- Activity Tracker Logic ---
-        // --- [UPDATED] Week calculation starts on Sunday ---
-        const getWeekNumber = (d) => {
-            // Copy date to avoid modifying the original
-            const targetDate = new Date(d.valueOf());
-            // Get the day number of the year (1-366)
-            const dayNum = Math.floor((targetDate - new Date(targetDate.getFullYear(), 0, 1)) / 86400000) + 1;
-            // Get the day of the week for Jan 1st (0=Sun, 1=Mon, etc)
-            const jan1Day = new Date(targetDate.getFullYear(), 0, 1).getDay();
-            // Calculate the week number
-            return Math.ceil((dayNum + jan1Day) / 7);
+        // --- Date & Week Utility Functions ---
+        const getWeekNumber = (date) => {
+            const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+            const firstDayOfYear = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+            const dayOfYear = Math.floor((tmp - firstDayOfYear) / 86400000);
+            const jan1Day = firstDayOfYear.getUTCDay();
+            const firstSundayOffset = (7 - jan1Day) % 7;
+            const firstSunday = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1 + firstSundayOffset));
+            let weekNum;
+            if (tmp < firstSunday) {
+                weekNum = 1;
+            } else {
+                weekNum = Math.floor((dayOfYear - firstSundayOffset) / 7) + 2;
+            }
+            return weekNum;
         };
+
+        const getWeekRange = (year, weekNum) => {
+            const jan1 = new Date(year, 0, 1);
+            const jan1Day = jan1.getDay();
+            const firstSunday = new Date(year, 0, 1 + ((7 - jan1Day) % 7));
+            if (weekNum === 1) {
+                const start = jan1;
+                const end = new Date(year, 0, 1 + (6 - jan1Day));
+                return { start, end };
+            }
+            const start = new Date(firstSunday.getTime() + (weekNum - 2) * 7 * 86400000);
+            const end = new Date(start.getTime() + 6 * 86400000);
+            return { start, end };
+        };
+        
+        const fmtDate = d => `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}, ${d.getFullYear()}`;
+
         const getQuarterFromWeek = (week) => {
             if (week <= 13) return 'Q1'; if (week <= 26) return 'Q2'; if (week <= 39) return 'Q3'; return 'Q4';
         };
+        
         const getQuarterFromDate = (date) => {
             if (!date || isNaN(date.getTime())) { date = new Date(); }
             const month = date.getMonth(); // 0-11
             if (month < 3) return 'Q1'; if (month < 6) return 'Q2'; if (month < 9) return 'Q3'; return 'Q4';
         };
 
+        // --- Filter & Table Rendering Logic ---
         const populateDateFilters = () => {
             const yearFilter = document.getElementById('year-filter');
             const quarterFilter = document.getElementById('quarter-activity-filter');
@@ -281,7 +304,15 @@
             populate(yearFilter, years, 'All Years', y => y);
             populate(quarterFilter, quarters, 'All Quarters', q => q);
             populate(monthFilter, months, 'All Months', m => monthNames[m]);
-            populate(weekFilter, weeks, 'All Weeks', w => `Week ${w}`);
+            
+            // Update week filter to show ranges
+            populate(weekFilter, weeks, 'All Weeks', w => {
+                const yearToUse = selectedYear !== 'all' ? parseInt(selectedYear) : new Date().getFullYear();
+                const activityForYear = activitiesCache.find(a => a.week == w && new Date(a.date).getFullYear() === yearToUse);
+                const year = (activityForYear && activityForYear.date) ? new Date(activityForYear.date).getFullYear() : yearToUse;
+                const { start, end } = getWeekRange(year, Number(w));
+                return `W${w} (${fmtDate(start)} - ${fmtDate(end)})`;
+            });
         };
 
 
@@ -295,7 +326,7 @@
                 const activityDateStr = row.querySelector('.date-input').value;
                 if (!activityDateStr) { row.style.display = 'none'; return; }
                 const activityDate = new Date(activityDateStr);
-                const activityWeek = row.querySelector('.week').textContent;
+                const activityWeek = row.dataset.week; // Use data attribute for original week number
                 const activityQuarter = getQuarterFromWeek(parseInt(activityWeek));
 
                 const yearMatch = year === 'all' || activityDate.getUTCFullYear().toString() === year;
@@ -320,7 +351,7 @@
                 const hours = parseFloat(row.querySelector('.total-hours').textContent) || 0;
                 const billableHours = parseFloat(row.querySelector('.billable-hours').textContent) || 0;
                 
-                weeksInSelection.add(row.querySelector('.week').textContent);
+                weeksInSelection.add(row.dataset.week);
                 
                 if (type === 'Work') {
                     totalWorkedHours += hours;
@@ -353,8 +384,18 @@
                 const data = activityDoc;
                 const row = activityTableBody.insertRow();
                 row.dataset.id = data.id;
+                row.dataset.week = data.week || ''; // Store original week number
+
+                const weekNum = data.week || '';
+                let weekHtml = weekNum;
+                if (weekNum && data.date) {
+                    const year = new Date(data.date).getFullYear();
+                    const { start, end } = getWeekRange(year, Number(weekNum));
+                    weekHtml = `W${weekNum} <br><span class="text-xs text-gray-400">(${fmtDate(start)} - ${fmtDate(end)})</span>`;
+                }
+
                 row.innerHTML = `
-                    <td class="week">${data.week || ''}</td>
+                    <td class="week align-top">${weekHtml}</td>
                     <td><input type="date" value="${data.date || ''}" class="date-input" min="2020-01-01" max="2100-12-31"></td>
                     <td><select class="type-select"><option value="Work" ${data.type === 'Work' ? 'selected' : ''}>Work</option><option value="PTO" ${data.type === 'PTO' ? 'selected' : ''}>PTO</option><option value="Holiday" ${data.type === 'Holiday' ? 'selected' : ''}>Holiday</option></select></td>
                     <td contenteditable="true">${data.project || ''}</td>
@@ -370,7 +411,7 @@
         const updateActivity = (id, data) => setDoc(doc(db, `users/${userId}/activities`, id), data, { merge: true });
         const deleteActivity = (id) => deleteDoc(doc(db, `users/${userId}/activities`, id));
         
-        // --- Objectives Logic ---
+        // --- Objectives & Summary Logic ---
         const updateProgress = () => {
             document.querySelectorAll('.summary-table tbody tr').forEach(row => {
                 const target = parseFloat(row.cells[2].textContent.replace(/[^0-9.]/g, ''));
@@ -539,9 +580,9 @@
                 const batch = writeBatch(db);
                 const activitiesRef = collection(db, `users/${userId}/activities`);
                 const sampleActivities = [
-                    { date: '2025-07-02', week: 27, type: 'Work', project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
-                    { date: '2025-07-04', week: 27, type: 'Holiday', project: 'National Holiday', action: '4th of July', status: 'Completed', totalHours: 8, billableHours: 0, createdAt: new Date() },
-                    { date: '2025-07-08', week: 28, type: 'Work', project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
+                    { date: '2025-07-02', week: getWeekNumber(new Date('2025-07-02')), type: 'Work', project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
+                    { date: '2025-07-04', week: getWeekNumber(new Date('2025-07-04')), type: 'Holiday', project: 'National Holiday', action: '4th of July', status: 'Completed', totalHours: 8, billableHours: 0, createdAt: new Date() },
+                    { date: '2025-07-08', week: getWeekNumber(new Date('2025-07-08')), type: 'Work', project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
                 ];
                 sampleActivities.forEach(activity => { batch.set(doc(activitiesRef), activity); });
                 const sampleObjectives = [
