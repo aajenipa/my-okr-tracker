@@ -154,15 +154,58 @@
         };
 
         // --- Authentication Functions ---
-        const signInWithGoogle = async () => { /* ... */ };
+        const signInWithGoogle = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                const result = await signInWithPopup(auth, provider);
+                if (auth.currentUser?.isAnonymous) {
+                    const credential = GoogleAuthProvider.credentialFromResult(result);
+                    await linkWithCredential(auth.currentUser, credential);
+                }
+            } catch (error) {
+                document.getElementById('auth-error').textContent = error.message;
+            }
+        };
         const signOutUser = () => signOut(auth);
-        const handleEmailAuth = async (event) => { /* ... */ };
-        const toggleAuthForm = () => { /* ... */ };
+        const handleEmailAuth = async (event) => {
+            event.preventDefault();
+            const email = document.getElementById('email-input').value;
+            const password = document.getElementById('password-input').value;
+            document.getElementById('auth-error').textContent = '';
+            try {
+                if (isSigningUp) {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                } else {
+                    await signInWithEmailAndPassword(auth, email, password);
+                }
+            } catch (error) {
+                document.getElementById('auth-error').textContent = error.message;
+            }
+        };
+        const toggleAuthForm = () => {
+            isSigningUp = !isSigningUp;
+            document.getElementById('email-signin-btn').classList.toggle('hidden');
+            document.getElementById('email-signup-btn').classList.toggle('hidden');
+            document.getElementById('form-toggle-text').textContent = isSigningUp ? 'Already have an account?' : 'Need an account?';
+            document.getElementById('form-toggle-btn').textContent = isSigningUp ? 'Sign In' : 'Sign Up';
+            document.getElementById('auth-error').textContent = '';
+        };
 
         // --- Activity Tracker Logic ---
-        const getWeekNumber = (d) => { /* ... */ };
-        const getQuarterFromWeek = (week) => { /* ... */ };
-        const getQuarterFromDate = (date) => { /* ... */ };
+        const getWeekNumber = (d) => {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        };
+        const getQuarterFromWeek = (week) => {
+            if (week <= 13) return 'Q1'; if (week <= 26) return 'Q2'; if (week <= 39) return 'Q3'; return 'Q4';
+        };
+        const getQuarterFromDate = (date) => {
+            if (!date || isNaN(date.getTime())) { date = new Date(); }
+            const month = date.getMonth(); // 0-11
+            if (month < 3) return 'Q1'; if (month < 6) return 'Q2'; if (month < 9) return 'Q3'; return 'Q4';
+        };
         
         const filterActivities = () => {
             const startDateFilter = document.getElementById('start-date-filter').value;
@@ -187,29 +230,233 @@
             calculateUtilization();
         };
         
-        const calculateUtilization = () => { /* ... */ };
-        const renderActivityTable = () => { /* ... */ };
-        const toggleDateSort = () => { /* ... */ };
-        const addActivityRow = () => { /* ... */ };
-        const updateActivity = (id, data) => { /* ... */ };
-        const deleteActivity = (id) => { /* ... */ };
+        const calculateUtilization = () => {
+            const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            let totalWorkedHours = 0, billableHoursSum = 0, totalTimeOffHours = 0;
+            const weeksInSelection = new Set();
+            
+            const rowsToConsider = Array.from(document.querySelectorAll('#activity-table tbody tr')).filter(row => row.style.display !== 'none');
+            
+            rowsToConsider.forEach(row => {
+                const type = row.querySelector('.type-select').value;
+                const hours = parseFloat(row.querySelector('.total-hours').textContent) || 0;
+                weeksInSelection.add(row.querySelector('.week').textContent);
+                
+                if (type === 'Work') {
+                    totalWorkedHours += hours;
+                    billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
+                } else {
+                    totalTimeOffHours += hours;
+                }
+            });
+
+            const numWeeks = weeksInSelection.size || 1;
+            const totalAvailableHours = (workingHoursPerWeek * numWeeks) - totalTimeOffHours;
+            const basedOnText = `Across ${numWeeks} week(s) in selection`;
+            
+            const effectiveUtilization = (totalWorkedHours > 0 && totalAvailableHours > 0) ? (totalWorkedHours / totalAvailableHours) * 100 : 0;
+            const billableUtilization = (totalWorkedHours > 0) ? (billableHoursSum / totalWorkedHours) * 100 : 0;
+            
+            document.getElementById('utilization-summary').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (Selection)</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalWorkedHours.toFixed(1)}</p></div>
+                <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
+                <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>`;
+        };
+        
+        const renderActivityTable = () => {
+            activityTableBody.innerHTML = '';
+            const sortedActivities = [...activitiesCache].sort((a, b) => {
+                const dateA = new Date(a.date); const dateB = new Date(b.date);
+                return dateSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+            });
+            sortedActivities.forEach(activityDoc => {
+                const data = activityDoc;
+                const row = activityTableBody.insertRow();
+                row.dataset.id = data.id;
+                row.innerHTML = `
+                    <td class="week">${data.week || ''}</td>
+                    <td><input type="date" value="${data.date || ''}" class="date-input" min="2025-01-01" max="2100-12-31"></td>
+                    <td><select class="type-select"><option value="Work" ${data.type === 'Work' ? 'selected' : ''}>Work</option><option value="PTO" ${data.type === 'PTO' ? 'selected' : ''}>PTO</option><option value="Holiday" ${data.type === 'Holiday' ? 'selected' : ''}>Holiday</option></select></td>
+                    <td contenteditable="true">${data.project || ''}</td>
+                    <td contenteditable="true">${data.action || ''}</td>
+                    <td contenteditable="true">${data.status || 'In Progress'}</td>
+                    <td contenteditable="true" class="total-hours">${data.totalHours || 0}</td>
+                    <td contenteditable="true" class="billable-hours">${data.billableHours || 0}</td>
+                    <td class="text-center"><button class="delete-activity-btn text-red-500 hover:text-red-700 text-xs">Delete</button></td>`;
+            });
+        };
+        const toggleDateSort = () => { dateSortDirection = dateSortDirection === 'desc' ? 'asc' : 'desc'; document.getElementById('date-sort-btn').innerHTML = dateSortDirection === 'desc' ? '↓' : '↑'; renderActivityTable(); };
+        const addActivityRow = () => addDoc(collection(db, `users/${userId}/activities`), { date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), type: 'Work', project: '', action: '', status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date() });
+        const updateActivity = (id, data) => setDoc(doc(db, `users/${userId}/activities`, id), data, { merge: true });
+        const deleteActivity = (id) => deleteDoc(doc(db, `users/${userId}/activities`, id));
         
         // --- Objectives Logic ---
-        const updateProgress = () => { /* ... */ };
-        const populateQuarterFilter = () => { /* ... */ };
-        const filterSummaryByQuarter = () => { /* ... */ };
-        const renderQuarterlySummaryCards = () => { /* ... */ };
-        const handleQuarterFilterChange = () => { /* ... */ };
-        const renderObjectives = () => { /* ... */ };
-        const addObjective = () => { /* ... */ };
-        const updateObjective = (id, data) => { /* ... */ };
-        const deleteObjective = (id) => { /* ... */ };
-        const addKR = (id, krs) => { /* ... */ };
-        const deleteKR = (id, krs, index) => { /* ... */ };
-        const moveObjective = async (index, direction) => { /* ... */ };
+        const updateProgress = () => {
+            document.querySelectorAll('.summary-table tbody tr').forEach(row => {
+                const target = parseFloat(row.cells[2].textContent.replace(/[^0-9.]/g, ''));
+                const actual = parseFloat(row.cells[3].textContent.replace(/[^0-9.]/g, ''));
+                const progressCell = row.cells[4];
+                if (!isNaN(target) && !isNaN(actual) && target > 0) {
+                    let progress = Math.min(100, Math.max(0, (actual / target) * 100));
+                    let colorClass = progress >= 75 ? 'bg-green-500' : progress >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+                    progressCell.innerHTML = `<div class="w-full bg-gray-200 rounded-full h-2.5"><div class="${colorClass} h-2.5 rounded-full" style="width: ${progress}%"></div></div><div class="text-xs text-center text-gray-600 mt-1">${progress.toFixed(0)}%</div>`;
+                } else {
+                    progressCell.innerHTML = '';
+                }
+            });
+        };
+        const populateQuarterFilter = () => {
+            const quarterCells = document.querySelectorAll('#summary .quarter-select');
+            const quarterFilter = document.getElementById('quarter-filter');
+            const uniqueQuarters = new Set(Array.from(quarterCells).map(cell => cell.value).filter(Boolean));
+            const currentSelection = quarterFilter.value;
+            quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
+            Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
+            quarterFilter.value = Array.from(quarterFilter.options).some(opt => opt.value === currentSelection) ? currentSelection : 'all';
+        };
+        const filterSummaryByQuarter = () => {
+            const selectedQuarter = document.getElementById('quarter-filter').value;
+            document.querySelectorAll('.objective-block').forEach(block => {
+                let hasVisibleRows = false;
+                block.querySelectorAll('tbody tr').forEach(row => {
+                    const rowQuarter = row.querySelector('.quarter-select').value;
+                    if (selectedQuarter === 'all' || rowQuarter === selectedQuarter) {
+                        row.style.display = ''; hasVisibleRows = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                block.style.display = hasVisibleRows ? 'block' : 'none';
+            });
+        };
+        const renderQuarterlySummaryCards = () => {
+            const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            const selectedQuarter = document.getElementById('quarter-filter').value;
+            let totalWorkedHours = 0, billableHoursSum = 0, totalTimeOffHours = 0;
+            const weeksInSelection = new Set();
+            const rowsToConsider = activitiesCache.filter(activity => {
+                if (!activity.week) return false;
+                if (selectedQuarter === 'all') return true;
+                return getQuarterFromWeek(activity.week) === selectedQuarter;
+            });
+            rowsToConsider.forEach(activity => {
+                weeksInSelection.add(activity.week);
+                if (activity.type === 'Work') {
+                    totalWorkedHours += parseFloat(activity.totalHours) || 0;
+                    billableHoursSum += parseFloat(activity.billableHours) || 0;
+                } else {
+                    totalTimeOffHours += parseFloat(activity.totalHours) || 0;
+                }
+            });
+            const numWeeks = weeksInSelection.size || 1;
+            const totalAvailableHours = (workingHoursPerWeek * numWeeks) - totalTimeOffHours;
+            const basedOnText = selectedQuarter === 'all' ? `Across all quarters` : `Across ${numWeeks} week(s) in ${selectedQuarter}`;
+            const effectiveUtilization = (totalWorkedHours > 0 && totalAvailableHours > 0) ? (totalWorkedHours / totalAvailableHours) * 100 : 0;
+            const billableUtilization = (totalWorkedHours > 0) ? (billableHoursSum / totalWorkedHours) * 100 : 0;
+            let totalProgress = 0, krCount = 0;
+            objectivesCache.forEach(objDoc => {
+                const objectiveData = objDoc.data();
+                (objectiveData.krs || []).forEach(kr => {
+                    const krQuarter = kr.quarter || '';
+                    if (selectedQuarter === 'all' || krQuarter === selectedQuarter) {
+                        const target = parseFloat(kr.target);
+                        const actual = parseFloat(kr.actual);
+                        if (!isNaN(target) && !isNaN(actual) && target > 0) {
+                            totalProgress += Math.min(100, Math.max(0, (actual / target) * 100));
+                            krCount++;
+                        }
+                    }
+                });
+            });
+            const averageOkrProgress = krCount > 0 ? totalProgress / krCount : 0;
+            document.getElementById('quarterly-summary-cards').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (${selectedQuarter})</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalWorkedHours.toFixed(1)}</p></div>
+                <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
+                <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>
+                <div class="bg-yellow-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-yellow-800">Overall OKR Progress</h3><p class="mt-1 text-3xl font-semibold text-yellow-900">${averageOkrProgress.toFixed(0)}%</p><p class="text-xs text-gray-500">Avg. of ${krCount} KRs in selection</p></div>`;
+        };
+        const handleQuarterFilterChange = () => { filterSummaryByQuarter(); renderQuarterlySummaryCards(); };
+        const renderObjectives = () => {
+            objectivesContainer.innerHTML = '';
+            objectivesCache.forEach((doc, index) => {
+                const data = doc.data();
+                const block = document.createElement('div');
+                block.className = 'objective-block';
+                block.dataset.id = doc.id;
+                const krsHTML = (data.krs || []).map((kr, i) => `
+                    <tr data-index="${i}">
+                        <td><select class="quarter-select"><option value="Q1" ${kr.quarter === 'Q1' ? 'selected' : ''}>Q1</option><option value="Q2" ${kr.quarter === 'Q2' ? 'selected' : ''}>Q2</option><option value="Q3" ${kr.quarter === 'Q3' ? 'selected' : ''}>Q3</option><option value="Q4" ${kr.quarter === 'Q4' ? 'selected' : ''}>Q4</option></select></td>
+                        <td contenteditable="true">${kr.result || ''}</td>
+                        <td contenteditable="true">${kr.target || ''}</td>
+                        <td contenteditable="true" class="actual">${kr.actual || ''}</td>
+                        <td class="progress"></td>
+                        <td contenteditable="true">${kr.notes || ''}</td>
+                        <td class="text-center"><button class="delete-kr-btn text-red-500 text-xs">Delete</button></td>
+                    </tr>`).join('');
+                block.innerHTML = `
+                    <div class="bg-gray-100 p-4 rounded-lg flex justify-between items-center">
+                        <div class="flex items-center">
+                            <div class="flex flex-col mr-4">
+                                ${index > 0 ? `<svg class="control-arrow h-5 w-5 text-gray-500 move-up" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>` : `<div class="h-5 w-5"></div>`}
+                                ${index < objectivesCache.length - 1 ? `<svg class="control-arrow h-5 w-5 text-gray-500 move-down" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>` : `<div class="h-5 w-5"></div>`}
+                            </div>
+                            <h3 contenteditable="true" class="font-bold text-lg text-gray-800">${data.title}</h3>
+                        </div>
+                        <button class="delete-objective-btn text-red-500 text-xs hover:underline">Delete Objective</button>
+                    </div>
+                    <div class="table-container mt-2">
+                        <table class="min-w-full summary-table">
+                            <thead class="bg-gray-50"><tr><th>Quarter</th><th>Key Result</th><th>Target</th><th>Actual</th><th>Progress</th><th>Key Achievements & Notes</th><th>Actions</th></tr></thead>
+                            <tbody>${krsHTML}</tbody>
+                        </table>
+                        <button class="add-kr-btn mt-2 bg-gray-100 text-xs">+ Add Key Result</button>
+                    </div>`;
+                objectivesContainer.appendChild(block);
+            });
+            updateProgress();
+            populateQuarterFilter();
+            filterSummaryByQuarter();
+        };
+        const addObjective = () => { const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0; addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [{ quarter: getQuarterFromDate(new Date()), result: '', target: '', actual: '', notes: '' }], order: newOrder, createdAt: new Date() }); };
+        const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
+        const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
+        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: getQuarterFromDate(new Date()), result: '', target: '', actual: '', notes: '' }] });
+        const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
+        const moveObjective = async (index, direction) => {
+            const batch = writeBatch(db);
+            const currentObj = objectivesCache[index];
+            const swapIndex = direction === 'up' ? index - 1 : index + 1;
+            const swapObj = objectivesCache[swapIndex];
+            if (swapObj) {
+                const currentOrder = currentObj.data().order;
+                const swapOrder = swapObj.data().order;
+                batch.update(doc(db, `users/${userId}/objectives`, currentObj.id), { order: swapOrder });
+                batch.update(doc(db, `users/${userId}/objectives`, swapObj.id), { order: currentOrder });
+                await batch.commit();
+            }
+        };
 
         // --- Firebase Initialization and Auth ---
-        async function seedInitialData(userId) { /* ... */ }
+        async function seedInitialData(userId) {
+            const objectivesRef = collection(db, `users/${userId}/objectives`);
+            const objectivesSnapshot = await getDocs(query(objectivesRef));
+            if (objectivesSnapshot.empty) {
+                const batch = writeBatch(db);
+                const activitiesRef = collection(db, `users/${userId}/activities`);
+                const sampleActivities = [
+                    { date: '2025-07-02', week: 27, type: 'Work', project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
+                    { date: '2025-07-04', week: 27, type: 'Holiday', project: 'National Holiday', action: '4th of July', status: 'Completed', totalHours: 8, billableHours: 0, createdAt: new Date() },
+                    { date: '2025-07-08', week: 28, type: 'Work', project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
+                ];
+                sampleActivities.forEach(activity => { batch.set(doc(activitiesRef), activity); });
+                const sampleObjectives = [
+                    { title: "Drive High-Impact Project Delivery", order: 0, createdAt: new Date(), krs: [ { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Consistently billed over 34 hours per week." }, { quarter: "Q3", result: "Successfully deliver all milestones for Project Alpha on or before the deadline.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." } ] },
+                    { title: "Enhance Professional Skills", order: 1, createdAt: new Date(), krs: [ { quarter: "Q3", result: "Complete 2 professional development courses.", target: "2", actual: "1", notes: "Completed Data Viz course. Scheduled PM course." }, { quarter: "Q4", result: "Mentor one junior team member.", target: "1", actual: "0", notes: "Scheduled first session with Alex." } ] }
+                ];
+                sampleObjectives.forEach(obj => { batch.set(doc(objectivesRef), obj); });
+                await batch.commit();
+            }
+        }
         
         async function initialize() {
             try {
@@ -217,10 +464,82 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
+                // Initialize Slim Select
+                quarterActivityFilter = new SlimSelect({ select: '#quarter-activity-filter', settings: { placeholderText: 'All Quarters' } });
+                monthFilter = new SlimSelect({ select: '#month-filter', settings: { placeholderText: 'All Months' } });
+                weekFilter = new SlimSelect({ select: '#week-filter', settings: { placeholderText: 'All Weeks' } });
+
                 // Event Delegation for dynamic content
-                document.body.addEventListener('click', (e) => { /* ... */ });
-                document.body.addEventListener('blur', (e) => { /* ... */ }, true);
-                document.body.addEventListener('change', (e) => { /* ... */ });
+                document.body.addEventListener('click', (e) => {
+                    const target = e.target;
+                    if (target.closest('.objective-block')) {
+                        const objectiveBlock = target.closest('.objective-block');
+                        const docId = objectiveBlock.dataset.id;
+                        const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        if (target.classList.contains('delete-objective-btn')) deleteObjective(docId);
+                        else if (target.classList.contains('add-kr-btn')) addKR(docId, objectivesCache[objIndex].data().krs || []);
+                        else if (target.closest('.move-up')) moveObjective(objIndex, 'up');
+                        else if (target.closest('.move-down')) moveObjective(objIndex, 'down');
+                        else if (target.classList.contains('delete-kr-btn')) {
+                            const krIndex = parseInt(target.closest('tr').dataset.index);
+                            deleteKR(docId, objectivesCache[objIndex].data().krs || [], krIndex);
+                        }
+                    } else if (target.closest('#activity-table') && target.classList.contains('delete-activity-btn')) {
+                        const row = target.closest('tr');
+                        if (row) deleteActivity(row.dataset.id);
+                    }
+                });
+
+                document.body.addEventListener('blur', (e) => {
+                    const target = e.target;
+                    if (target.closest('.objective-block')) {
+                        const block = target.closest('.objective-block');
+                        const docId = block.dataset.id;
+                        const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        if (target.tagName === 'H3') {
+                            updateObjective(docId, { title: target.textContent });
+                        } else if (target.closest('tr')) {
+                            const krIndex = parseInt(target.closest('tr').dataset.index);
+                            const cellIndex = target.closest('td').cellIndex;
+                            const field = { 1: 'result', 2: 'target', 3: 'actual', 5: 'notes' }[cellIndex];
+                            if(field) {
+                                const krs = objectivesCache[objIndex].data().krs || [];
+                                krs[krIndex][field] = target.textContent;
+                                updateObjective(docId, { krs });
+                            }
+                        }
+                    } else if (target.closest('#activity-table')) {
+                        const row = target.closest('tr');
+                        if (!row) return;
+                        const docId = row.dataset.id;
+                        const cellIndex = target.closest('td').cellIndex;
+                        const fieldMap = { 3: 'project', 4: 'action', 5: 'status', 6: 'totalHours', 7: 'billableHours' };
+                        const field = fieldMap[cellIndex];
+                        if (field) updateActivity(docId, { [field]: target.textContent });
+                    }
+                }, true);
+
+                document.body.addEventListener('change', (e) => {
+                    const target = e.target;
+                    if (target.closest('.objective-block') && target.classList.contains('quarter-select')) {
+                        const block = target.closest('.objective-block');
+                        const krRow = target.closest('tr');
+                        const docId = block.dataset.id;
+                        const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        const krIndex = parseInt(krRow.dataset.index);
+                        const krs = objectivesCache[objIndex].data().krs || [];
+                        krs[krIndex]['quarter'] = target.value;
+                        updateObjective(docId, { krs });
+                    } else if (target.closest('#activity-table') && target.classList.contains('type-select')) {
+                        const row = target.closest('tr');
+                        updateActivity(row.dataset.id, { type: target.value });
+                    } else if (target.closest('#activity-table') && target.classList.contains('date-input')) {
+                         const row = target.closest('tr');
+                         const date = new Date(target.value);
+                         const week = isNaN(date.getTime()) ? '' : getWeekNumber(date);
+                         updateActivity(row.dataset.id, { date: target.value, week: week });
+                    }
+                });
 
                 // Static Listeners
                 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
@@ -231,9 +550,11 @@
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
-                document.getElementById('start-date-filter').addEventListener('change', filterActivities);
-                document.getElementById('end-date-filter').addEventListener('change', filterActivities);
+                document.getElementById('year-filter').addEventListener('change', () => { updateCascadingFilters(); filterActivities(); });
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
+                quarterActivityFilter.onChange = filterActivities;
+                monthFilter.onChange = filterActivities;
+                weekFilter.onChange = filterActivities;
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -247,6 +568,7 @@
                         activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
                             activitiesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             renderActivityTable();
+                            populateDateFilters();
                             renderQuarterlySummaryCards();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
