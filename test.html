@@ -253,6 +253,12 @@
             populate(quarterFilter, quarters, 'All Quarters', q => q);
             populate(monthFilter, months, 'All Months', m => monthNames[m]);
             populate(weekFilter, weeks, 'All Weeks', w => `Week ${w}`);
+
+            // Force all filters to "all" (this is the actual fix)
+            yearFilter.value = 'all';
+            quarterFilter.value = 'all';
+            monthFilter.value = 'all';
+            weekFilter.value = 'all';
         };
 
         const filterActivities = () => {
