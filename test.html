@@ -289,7 +289,6 @@
                     <td contenteditable="true" class="billable-hours">${data.billableHours || 0}</td>
                     <td class="text-center"><button class="text-red-500 hover:text-red-700 text-xs">Delete</button></td>`;
             });
-            filterActivities();
         };
         const toggleDateSort = () => { dateSortDirection = dateSortDirection === 'desc' ? 'asc' : 'desc'; document.getElementById('date-sort-btn').innerHTML = dateSortDirection === 'desc' ? '↓' : '↑'; renderActivityTable(); };
         const addActivityRow = () => addDoc(collection(db, `users/${userId}/activities`), { date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), project: '', action: '', status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date() });
@@ -297,21 +296,85 @@
         const deleteActivity = (id) => deleteDoc(doc(db, `users/${userId}/activities`, id));
         
         // --- Objectives Logic ---
-        const updateProgress = () => { /* ... */ };
-        const populateQuarterFilter = () => { /* ... */ };
-        const filterSummaryByQuarter = () => { /* ... */ };
-        const renderQuarterlySummaryCards = () => { /* ... */ };
-        const handleQuarterFilterChange = () => { filterSummaryByQuarter(); renderQuarterlySummaryCards(); };
-        const addObjective = () => {
-            const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0;
-            addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], order: newOrder, createdAt: new Date() });
+        const updateProgress = () => {
+            document.querySelectorAll('.summary-table tbody tr').forEach(row => {
+                const target = parseFloat(row.cells[2].textContent.replace(/[^0-9.]/g, ''));
+                const actual = parseFloat(row.cells[3].textContent.replace(/[^0-9.]/g, ''));
+                const progressCell = row.cells[4];
+                if (!isNaN(target) && !isNaN(actual) && target > 0) {
+                    let progress = Math.min(100, Math.max(0, (actual / target) * 100));
+                    let colorClass = progress >= 75 ? 'bg-green-500' : progress >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+                    progressCell.innerHTML = `<div class="w-full bg-gray-200 rounded-full h-2.5"><div class="${colorClass} h-2.5 rounded-full" style="width: ${progress}%"></div></div><div class="text-xs text-center text-gray-600 mt-1">${progress.toFixed(0)}%</div>`;
+                } else {
+                    progressCell.innerHTML = '';
+                }
+            });
         };
-        const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
-        const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
-        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q3', result: '', target: '', actual: '', notes: '' }] });
-        const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
-        const moveObjective = async (index, direction) => { /* ... */ };
-
+        const populateQuarterFilter = () => {
+            const quarterCells = document.querySelectorAll('#summary .quarter');
+            const quarterFilter = document.getElementById('quarter-filter');
+            const uniqueQuarters = new Set(Array.from(quarterCells).map(cell => cell.textContent.trim()).filter(Boolean));
+            const currentSelection = quarterFilter.value;
+            quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
+            Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
+            quarterFilter.value = Array.from(quarterFilter.options).some(opt => opt.value === currentSelection) ? currentSelection : 'all';
+        };
+        const filterSummaryByQuarter = () => {
+            const selectedQuarter = document.getElementById('quarter-filter').value;
+            document.querySelectorAll('.objective-block').forEach(block => {
+                let hasVisibleRows = false;
+                block.querySelectorAll('tbody tr').forEach(row => {
+                    const rowQuarter = row.querySelector('.quarter')?.textContent.trim();
+                    if (selectedQuarter === 'all' || rowQuarter === selectedQuarter) {
+                        row.style.display = ''; hasVisibleRows = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                block.style.display = hasVisibleRows ? 'block' : 'none';
+            });
+        };
+        const renderQuarterlySummaryCards = () => {
+            const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            const selectedQuarter = document.getElementById('quarter-filter').value;
+            let totalHoursSum = 0, billableHoursSum = 0;
+            const rowsToConsider = activitiesCache.filter(activity => {
+                if (!activity.week) return false;
+                if (selectedQuarter === 'all') return true;
+                return getQuarterFromWeek(activity.week) === selectedQuarter;
+            });
+            rowsToConsider.forEach(activity => {
+                totalHoursSum += parseFloat(activity.totalHours) || 0;
+                billableHoursSum += parseFloat(activity.billableHours) || 0;
+            });
+            const numWeeks = new Set(rowsToConsider.map(r => r.week)).size || 1;
+            const effectiveWorkingHours = workingHoursPerWeek * numWeeks;
+            const basedOnText = selectedQuarter === 'all' ? `Across all quarters` : `Across ${numWeeks} week(s) in ${selectedQuarter}`;
+            const effectiveUtilization = (totalHoursSum > 0 && effectiveWorkingHours > 0) ? (totalHoursSum / effectiveWorkingHours) * 100 : 0;
+            const billableUtilization = (totalHoursSum > 0) ? (billableHoursSum / totalHoursSum) * 100 : 0;
+            let totalProgress = 0, krCount = 0;
+            objectivesCache.forEach(objDoc => {
+                const objectiveData = objDoc.data();
+                (objectiveData.krs || []).forEach(kr => {
+                    const krQuarter = kr.quarter || '';
+                    if (selectedQuarter === 'all' || krQuarter === selectedQuarter) {
+                        const target = parseFloat(kr.target);
+                        const actual = parseFloat(kr.actual);
+                        if (!isNaN(target) && !isNaN(actual) && target > 0) {
+                            totalProgress += Math.min(100, Math.max(0, (actual / target) * 100));
+                            krCount++;
+                        }
+                    }
+                });
+            });
+            const averageOkrProgress = krCount > 0 ? totalProgress / krCount : 0;
+            document.getElementById('quarterly-summary-cards').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (${selectedQuarter})</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalHoursSum.toFixed(1)}</p></div>
+                <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
+                <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>
+                <div class="bg-yellow-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-yellow-800">Overall OKR Progress</h3><p class="mt-1 text-3xl font-semibold text-yellow-900">${averageOkrProgress.toFixed(0)}%</p><p class="text-xs text-gray-500">Avg. of ${krCount} KRs in selection</p></div>`;
+        };
+        const handleQuarterFilterChange = () => { filterSummaryByQuarter(); renderQuarterlySummaryCards(); };
         const renderObjectives = () => {
             objectivesContainer.innerHTML = '';
             objectivesCache.forEach((doc, index) => {
@@ -319,7 +382,6 @@
                 const block = document.createElement('div');
                 block.className = 'objective-block';
                 block.dataset.id = doc.id;
-                
                 const krsHTML = (data.krs || []).map((kr, i) => `
                     <tr data-index="${i}">
                         <td contenteditable="true" class="quarter">${kr.quarter || ''}</td>
@@ -330,7 +392,6 @@
                         <td contenteditable="true">${kr.notes || ''}</td>
                         <td class="text-center"><button class="delete-kr-btn text-red-500 text-xs">Delete</button></td>
                     </tr>`).join('');
-
                 block.innerHTML = `
                     <div class="bg-gray-100 p-4 rounded-lg flex justify-between items-center">
                         <div class="flex items-center">
@@ -355,10 +416,45 @@
             populateQuarterFilter();
             filterSummaryByQuarter();
         };
+        const addObjective = () => { const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0; addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], order: newOrder, createdAt: new Date() }); };
+        const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
+        const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
+        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q3', result: '', target: '', actual: '', notes: '' }] });
+        const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
+        const moveObjective = async (index, direction) => {
+            const batch = writeBatch(db);
+            const currentObj = objectivesCache[index];
+            const swapIndex = direction === 'up' ? index - 1 : index + 1;
+            const swapObj = objectivesCache[swapIndex];
+            if (swapObj) {
+                const currentOrder = currentObj.data().order;
+                const swapOrder = swapObj.data().order;
+                batch.update(doc(db, `users/${userId}/objectives`, currentObj.id), { order: swapOrder });
+                batch.update(doc(db, `users/${userId}/objectives`, swapObj.id), { order: currentOrder });
+                await batch.commit();
+            }
+        };
 
         // --- Firebase Initialization and Auth ---
-        
-        async function seedInitialData(userId) { /* ... (same as before) ... */ }
+        async function seedInitialData(userId) {
+            const objectivesRef = collection(db, `users/${userId}/objectives`);
+            const objectivesSnapshot = await getDocs(query(objectivesRef));
+            if (objectivesSnapshot.empty) {
+                const batch = writeBatch(db);
+                const activitiesRef = collection(db, `users/${userId}/activities`);
+                const sampleActivities = [
+                    { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
+                    { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
+                ];
+                sampleActivities.forEach(activity => { batch.set(doc(activitiesRef), activity); });
+                const sampleObjectives = [
+                    { title: "Drive High-Impact Project Delivery", order: 0, createdAt: new Date(), krs: [ { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Consistently billed over 34 hours per week." }, { quarter: "Q3", result: "Successfully deliver all milestones for Project Alpha on or before the deadline.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." } ] },
+                    { title: "Enhance Professional Skills", order: 1, createdAt: new Date(), krs: [ { quarter: "Q3", result: "Complete 2 professional development courses.", target: "2", actual: "1", notes: "Completed Data Viz course. Scheduled PM course." }, { quarter: "Q4", result: "Mentor one junior team member.", target: "1", actual: "0", notes: "Scheduled first session with Alex." } ] }
+                ];
+                sampleObjectives.forEach(obj => { batch.set(doc(objectivesRef), obj); });
+                await batch.commit();
+            }
+        }
         
         async function initialize() {
             try {
@@ -409,8 +505,10 @@
                     } else if (activityRow) {
                         const docId = activityRow.dataset.id;
                         const cellIndex = target.closest('td').cellIndex;
-                        const field = ['project', 'action', 'status', 'totalHours', 'billableHours'][cellIndex - 2];
-                        if (field) updateActivity(docId, { [field]: target.textContent });
+                        if (cellIndex >= 2) { // Ensure it's not week or date
+                            const field = ['project', 'action', 'status', 'totalHours', 'billableHours'][cellIndex - 2];
+                            if (field) updateActivity(docId, { [field]: target.textContent });
+                        }
                     }
                 }, true);
 
@@ -451,6 +549,7 @@
                         objectivesUnsubscribe = onSnapshot(objectivesQuery, snapshot => {
                             objectivesCache = snapshot.docs;
                             renderObjectives();
+                            renderQuarterlySummaryCards();
                         });
 
                         showApp();
