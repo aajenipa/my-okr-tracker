@@ -194,6 +194,7 @@
         };
 
         // --- Activity Tracker Logic ---
+        let filtersInitialized = false;
         const getWeekNumber = (d) => {
             d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
             d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -254,7 +255,14 @@
             populate(monthFilter, months, 'All Months', m => monthNames[m]);
             populate(weekFilter, weeks, 'All Weeks', w => `Week ${w}`);
 
-            // Force all filters to "all" (this is the actual fix)
+            // Only force the filters to 'all' the first time
+            if (!filtersInitialized) {
+                yearFilter.value = 'all';
+                quarterFilter.value = 'all';
+                monthFilter.value = 'all';
+                weekFilter.value = 'all';
+                filtersInitialized = true;
+            }
         };
 
         const filterActivities = () => {
