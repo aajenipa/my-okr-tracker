@@ -220,16 +220,21 @@
             const months = new Set();
             const weeks = new Set();
 
+            const selectedYear = yearFilter.value;
+            
             activitiesCache.forEach(activity => {
                 if (!activity.date) return;
                 const date = new Date(activity.date);
                 if (isNaN(date.getTime())) return;
                 
                 years.add(date.getUTCFullYear());
-                if(activity.week) {
-                    quarters.add(getQuarterFromWeek(activity.week));
-                    months.add(date.getUTCMonth());
-                    weeks.add(activity.week);
+
+                if (selectedYear === 'all' || date.getUTCFullYear().toString() === selectedYear) {
+                    if(activity.week) {
+                        quarters.add(getQuarterFromWeek(activity.week));
+                        months.add(date.getUTCMonth());
+                        weeks.add(activity.week);
+                    }
                 }
             });
 
@@ -588,7 +593,7 @@
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
-                document.getElementById('year-filter').addEventListener('change', () => { updateCascadingFilters(); filterActivities(); });
+                document.getElementById('year-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
                 document.getElementById('quarter-activity-filter').addEventListener('change', filterActivities);
                 document.getElementById('month-filter').addEventListener('change', filterActivities);
                 document.getElementById('week-filter').addEventListener('change', filterActivities);
