@@ -6,6 +6,9 @@
     <title>Live OKR Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Slim Select Library for Multi-select dropdowns -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/slim-select/2.8.2/slimselect.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/slim-select/2.8.2/slimselect.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .tab-button.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff; }
@@ -17,11 +20,12 @@
         .table-container { overflow-x: auto; }
         .add-row-btn { transition: all 0.2s ease-in-out; }
         .add-row-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .date-input, .type-select { background-color: transparent; border: none; padding: 0; width: 100%; }
-        .date-input:focus, .type-select:focus { outline: none; box-shadow: none; }
+        .date-input, .type-select, .quarter-select { background-color: transparent; border: none; padding: 0; width: 100%; }
+        .date-input:focus, .type-select:focus, .quarter-select:focus { outline: none; box-shadow: none; }
         #loader { display: flex; }
         .control-arrow, .sort-arrow { cursor: pointer; }
         .control-arrow:hover, .sort-arrow:hover { color: #4f46e5; }
+        .ss-main { min-width: 120px; }
     </style>
 </head>
 <body class="p-4 sm:p-6 md:p-8">
@@ -83,8 +87,9 @@
                     <h2 class="text-xl font-semibold text-gray-700">Weekly Activity Log</h2>
                     <div class="flex items-center space-x-2 sm:space-x-4 flex-wrap">
                         <div class="text-sm"><label for="year-filter" class="font-medium text-gray-600">Year:</label><select id="year-filter" class="p-2 border rounded-md bg-white"></select></div>
-                        <div class="text-sm"><label for="month-filter" class="font-medium text-gray-600">Month:</label><select id="month-filter" class="p-2 border rounded-md bg-white"></select></div>
-                        <div class="text-sm"><label for="week-filter" class="font-medium text-gray-600">Week:</label><select id="week-filter" class="p-2 border rounded-md bg-white"></select></div>
+                        <div class="text-sm"><label for="quarter-activity-filter" class="font-medium text-gray-600">Quarter:</label><select id="quarter-activity-filter" multiple></select></div>
+                        <div class="text-sm"><label for="month-filter" class="font-medium text-gray-600">Month:</label><select id="month-filter" multiple></select></div>
+                        <div class="text-sm"><label for="week-filter" class="font-medium text-gray-600">Week:</label><select id="week-filter" multiple></select></div>
                         <div class="text-sm"><label for="working-hours" class="font-medium text-gray-600">Weekly Hours:</label><input type="number" id="working-hours" value="40" class="w-20 p-2 border rounded-md text-center"></div>
                     </div>
                 </div>
@@ -134,6 +139,7 @@
         let activitiesCache = [];
         let dateSortDirection = 'desc';
         let isSigningUp = false;
+        let quarterActivityFilter, monthFilter, weekFilter;
 
         // --- UI Elements ---
         const loginScreen = document.getElementById('login-screen');
@@ -207,71 +213,99 @@
             const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
             return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
         };
+        const getDateRangeOfWeek = (year, week) => {
+            const d = new Date(Date.UTC(year, 0, 4)); // Jan 4th is always in week 1
+            d.setUTCDate(d.getUTCDate() + (week - 1) * 7);
+            const day = d.getUTCDay(); // 0=Sun, 1=Mon...
+            const sunday = new Date(d);
+            sunday.setUTCDate(d.getUTCDate() - day);
+            const saturday = new Date(sunday);
+            saturday.setUTCDate(sunday.getUTCDate() + 6);
+            return { start: sunday, end: saturday };
+        };
         const getQuarterFromWeek = (week) => {
             if (week <= 13) return 'Q1'; if (week <= 26) return 'Q2'; if (week <= 39) return 'Q3'; return 'Q4';
         };
+        const getQuarterFromDate = (date) => {
+            if (!date || isNaN(date.getTime())) { date = new Date(); }
+            const month = date.getMonth(); // 0-11
+            if (month < 3) return 'Q1'; if (month < 6) return 'Q2'; if (month < 9) return 'Q3'; return 'Q4';
+        };
+
         const populateDateFilters = () => {
             const yearFilter = document.getElementById('year-filter');
-            const monthFilter = document.getElementById('month-filter');
-            const weekFilter = document.getElementById('week-filter');
-
             const years = new Set();
-            const months = new Set();
-            const weekDateRanges = {};
+            activitiesCache.forEach(activity => {
+                if (activity.date) {
+                    const date = new Date(activity.date);
+                    if (!isNaN(date.getTime())) years.add(date.getUTCFullYear());
+                }
+            });
+            const currentYear = yearFilter.value;
+            yearFilter.innerHTML = '<option value="all">All Years</option>';
+            Array.from(years).sort((a,b) => b-a).forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
+            yearFilter.value = Array.from(yearFilter.options).some(o => o.value === currentYear) ? currentYear : 'all';
+            
+            updateCascadingFilters();
+        };
+
+        const updateCascadingFilters = () => {
+            const year = document.getElementById('year-filter').value;
+            const quarters = new Set(), months = new Set(), weekYearMap = {};
 
             activitiesCache.forEach(activity => {
                 if (!activity.date) return;
                 const date = new Date(activity.date);
                 if (isNaN(date.getTime())) return;
-                
-                const year = date.getUTCFullYear();
-                years.add(year);
-                months.add(date.getUTCMonth());
-                
-                if (activity.week) {
-                    if (!weekDateRanges[activity.week]) {
-                        weekDateRanges[activity.week] = { min: date, max: date };
-                    } else {
-                        if (date < weekDateRanges[activity.week].min) weekDateRanges[activity.week].min = date;
-                        if (date > weekDateRanges[activity.week].max) weekDateRanges[activity.week].max = date;
+                if (year !== 'all' && date.getUTCFullYear().toString() !== year) return;
+
+                const week = activity.week;
+                if(week) {
+                    quarters.add(getQuarterFromWeek(week));
+                    months.add(date.getUTCMonth());
+                    if (!weekYearMap[week]) {
+                        weekYearMap[week] = date.getUTCFullYear();
                     }
                 }
             });
 
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             
-            const populate = (select, options, allLabel, formatter) => {
-                const currentValue = select.value;
-                select.innerHTML = `<option value="all">${allLabel}</option>`;
-                Array.from(options).sort((a,b) => a-b).forEach(opt => {
-                    select.innerHTML += `<option value="${opt}">${formatter(opt)}</option>`;
-                });
-                select.value = Array.from(select.options).some(o => o.value === currentValue) ? currentValue : 'all';
+            const populateMulti = (slimSelectInstance, options, formatter) => {
+                const data = Array.from(options).sort((a,b) => a-b).map(opt => ({ text: formatter(opt), value: opt.toString() }));
+                slimSelectInstance.setData(data);
             };
 
-            populate(yearFilter, years, 'All Years', (y) => y);
-            populate(monthFilter, months, 'All Months', (m) => monthNames[m]);
-            populate(weekFilter, Object.keys(weekDateRanges), 'All Weeks', (w) => {
-                const range = weekDateRanges[w];
-                const start = `${String(range.min.getUTCMonth() + 1).padStart(2, '0')}/${String(range.min.getUTCDate()).padStart(2, '0')}`;
-                const end = `${String(range.max.getUTCMonth() + 1).padStart(2, '0')}/${String(range.max.getUTCDate()).padStart(2, '0')}`;
+            populateMulti(quarterActivityFilter, quarters, q => q);
+            populateMulti(monthFilter, months, m => monthNames[m]);
+            populateMulti(weekFilter, Object.keys(weekYearMap), w => {
+                const yearForWeek = weekYearMap[w];
+                const range = getDateRangeOfWeek(yearForWeek, parseInt(w));
+                const start = `${String(range.start.getUTCMonth() + 1).padStart(2, '0')}/${String(range.start.getUTCDate()).padStart(2, '0')}`;
+                const end = `${String(range.end.getUTCMonth() + 1).padStart(2, '0')}/${String(range.end.getUTCDate()).padStart(2, '0')}`;
                 return `${start} - ${end}`;
             });
         };
 
         const filterActivities = () => {
             const year = document.getElementById('year-filter').value;
-            const month = document.getElementById('month-filter').value;
-            const week = document.getElementById('week-filter').value;
+            const quarters = quarterActivityFilter.getSelected();
+            const months = monthFilter.getSelected();
+            const weeks = weekFilter.getSelected();
+
             document.querySelectorAll('#activity-table tbody tr').forEach(row => {
                 const activityDateStr = row.querySelector('.date-input').value;
                 if (!activityDateStr) { row.style.display = 'none'; return; }
                 const activityDate = new Date(activityDateStr);
                 const activityWeek = row.querySelector('.week').textContent;
+                const activityQuarter = getQuarterFromWeek(parseInt(activityWeek));
+
                 const yearMatch = year === 'all' || activityDate.getUTCFullYear().toString() === year;
-                const monthMatch = month === 'all' || activityDate.getUTCMonth().toString() === month;
-                const weekMatch = week === 'all' || activityWeek === week;
-                row.style.display = (yearMatch && monthMatch && weekMatch) ? '' : 'none';
+                const quarterMatch = quarters.length === 0 || quarters.includes(activityQuarter);
+                const monthMatch = months.length === 0 || months.includes(activityDate.getUTCMonth().toString());
+                const weekMatch = weeks.length === 0 || weeks.includes(activityWeek);
+
+                row.style.display = (yearMatch && quarterMatch && monthMatch && weekMatch) ? '' : 'none';
             });
             calculateUtilization();
         };
@@ -291,7 +325,7 @@
                 if (type === 'Work') {
                     totalWorkedHours += hours;
                     billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
-                } else { // PTO or Holiday
+                } else {
                     totalTimeOffHours += hours;
                 }
             });
@@ -321,7 +355,7 @@
                 row.dataset.id = data.id;
                 row.innerHTML = `
                     <td class="week">${data.week || ''}</td>
-                    <td><input type="date" value="${data.date || ''}" class="date-input"></td>
+                    <td><input type="date" value="${data.date || ''}" class="date-input" min="2025-01-01" max="2100-12-31"></td>
                     <td><select class="type-select"><option value="Work" ${data.type === 'Work' ? 'selected' : ''}>Work</option><option value="PTO" ${data.type === 'PTO' ? 'selected' : ''}>PTO</option><option value="Holiday" ${data.type === 'Holiday' ? 'selected' : ''}>Holiday</option></select></td>
                     <td contenteditable="true">${data.project || ''}</td>
                     <td contenteditable="true">${data.action || ''}</td>
@@ -352,9 +386,9 @@
             });
         };
         const populateQuarterFilter = () => {
-            const quarterCells = document.querySelectorAll('#summary .quarter');
+            const quarterCells = document.querySelectorAll('#summary .quarter-select');
             const quarterFilter = document.getElementById('quarter-filter');
-            const uniqueQuarters = new Set(Array.from(quarterCells).map(cell => cell.textContent.trim()).filter(Boolean));
+            const uniqueQuarters = new Set(Array.from(quarterCells).map(cell => cell.value).filter(Boolean));
             const currentSelection = quarterFilter.value;
             quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
             Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
@@ -365,7 +399,7 @@
             document.querySelectorAll('.objective-block').forEach(block => {
                 let hasVisibleRows = false;
                 block.querySelectorAll('tbody tr').forEach(row => {
-                    const rowQuarter = row.querySelector('.quarter')?.textContent.trim();
+                    const rowQuarter = row.querySelector('.quarter-select').value;
                     if (selectedQuarter === 'all' || rowQuarter === selectedQuarter) {
                         row.style.display = ''; hasVisibleRows = true;
                     } else {
@@ -431,7 +465,7 @@
                 block.dataset.id = doc.id;
                 const krsHTML = (data.krs || []).map((kr, i) => `
                     <tr data-index="${i}">
-                        <td contenteditable="true" class="quarter">${kr.quarter || ''}</td>
+                        <td><select class="quarter-select"><option value="Q1" ${kr.quarter === 'Q1' ? 'selected' : ''}>Q1</option><option value="Q2" ${kr.quarter === 'Q2' ? 'selected' : ''}>Q2</option><option value="Q3" ${kr.quarter === 'Q3' ? 'selected' : ''}>Q3</option><option value="Q4" ${kr.quarter === 'Q4' ? 'selected' : ''}>Q4</option></select></td>
                         <td contenteditable="true">${kr.result || ''}</td>
                         <td contenteditable="true">${kr.target || ''}</td>
                         <td contenteditable="true" class="actual">${kr.actual || ''}</td>
@@ -463,10 +497,10 @@
             populateQuarterFilter();
             filterSummaryByQuarter();
         };
-        const addObjective = () => { const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0; addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [], order: newOrder, createdAt: new Date() }); };
+        const addObjective = () => { const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0; addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [{ quarter: getQuarterFromDate(new Date()), result: '', target: '', actual: '', notes: '' }], order: newOrder, createdAt: new Date() }); };
         const updateObjective = (id, data) => setDoc(doc(db, `users/${userId}/objectives`, id), data, { merge: true });
         const deleteObjective = (id) => deleteDoc(doc(db, `users/${userId}/objectives`, id));
-        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: 'Q3', result: '', target: '', actual: '', notes: '' }] });
+        const addKR = (id, krs) => updateObjective(id, { krs: [...krs, { quarter: getQuarterFromDate(new Date()), result: '', target: '', actual: '', notes: '' }] });
         const deleteKR = (id, krs, index) => updateObjective(id, { krs: krs.filter((_, i) => i !== index) });
         const moveObjective = async (index, direction) => {
             const batch = writeBatch(db);
@@ -510,11 +544,16 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
+                // Initialize Slim Select
+                quarterActivityFilter = new SlimSelect({ select: '#quarter-activity-filter', settings: { placeholderText: 'All Quarters' } });
+                monthFilter = new SlimSelect({ select: '#month-filter', settings: { placeholderText: 'All Months' } });
+                weekFilter = new SlimSelect({ select: '#week-filter', settings: { placeholderText: 'All Weeks' } });
+
                 // Event Delegation for dynamic content
                 document.body.addEventListener('click', (e) => {
                     const target = e.target;
-                    const objectiveBlock = target.closest('.objective-block');
-                    if (objectiveBlock) {
+                    if (target.closest('.objective-block')) {
+                        const objectiveBlock = target.closest('.objective-block');
                         const docId = objectiveBlock.dataset.id;
                         const objIndex = objectivesCache.findIndex(d => d.id === docId);
                         if (target.classList.contains('delete-objective-btn')) deleteObjective(docId);
@@ -525,57 +564,60 @@
                             const krIndex = parseInt(target.closest('tr').dataset.index);
                             deleteKR(docId, objectivesCache[objIndex].data().krs || [], krIndex);
                         }
+                    } else if (target.closest('#activity-table') && target.classList.contains('delete-activity-btn')) {
+                        const row = target.closest('tr');
+                        if (row) deleteActivity(row.dataset.id);
                     }
                 });
 
                 document.body.addEventListener('blur', (e) => {
                     const target = e.target;
-                    const objectiveBlock = target.closest('.objective-block');
-                    if (objectiveBlock) {
-                        const docId = objectiveBlock.dataset.id;
+                    if (target.closest('.objective-block')) {
+                        const block = target.closest('.objective-block');
+                        const docId = block.dataset.id;
                         const objIndex = objectivesCache.findIndex(d => d.id === docId);
                         if (target.tagName === 'H3') {
                             updateObjective(docId, { title: target.textContent });
                         } else if (target.closest('tr')) {
                             const krIndex = parseInt(target.closest('tr').dataset.index);
                             const cellIndex = target.closest('td').cellIndex;
-                            const field = ['quarter', 'result', 'target', 'actual', 'notes'][cellIndex];
-                            const krs = objectivesCache[objIndex].data().krs || [];
-                            krs[krIndex][field] = target.textContent;
-                            updateObjective(docId, { krs });
+                            const field = { 1: 'result', 2: 'target', 3: 'actual', 5: 'notes' }[cellIndex];
+                            if(field) {
+                                const krs = objectivesCache[objIndex].data().krs || [];
+                                krs[krIndex][field] = target.textContent;
+                                updateObjective(docId, { krs });
+                            }
                         }
+                    } else if (target.closest('#activity-table')) {
+                        const row = target.closest('tr');
+                        if (!row) return;
+                        const docId = row.dataset.id;
+                        const cellIndex = target.closest('td').cellIndex;
+                        const fieldMap = { 3: 'project', 4: 'action', 5: 'status', 6: 'totalHours', 7: 'billableHours' };
+                        const field = fieldMap[cellIndex];
+                        if (field) updateActivity(docId, { [field]: target.textContent });
                     }
                 }, true);
 
-                activityTableBody.addEventListener('change', (e) => {
-                    const row = e.target.closest('tr');
-                    if (!row) return;
-                    const docId = row.dataset.id;
-                    if (e.target.classList.contains('date-input')) {
-                        const date = new Date(e.target.value);
-                        const week = isNaN(date.getTime()) ? '' : getWeekNumber(date);
-                        updateActivity(docId, { date: e.target.value, week: week });
-                    } else if (e.target.classList.contains('type-select')) {
-                        updateActivity(docId, { type: e.target.value });
-                    }
-                });
-
-                activityTableBody.addEventListener('blur', (e) => {
-                    const row = e.target.closest('tr');
-                    if (!row) return;
-                    const docId = row.dataset.id;
-                    const cellIndex = e.target.closest('td').cellIndex;
-                    const fieldMap = { 3: 'project', 4: 'action', 5: 'status', 6: 'totalHours', 7: 'billableHours' };
-                    const field = fieldMap[cellIndex];
-                    if (field) {
-                        updateActivity(docId, { [field]: e.target.textContent });
-                    }
-                }, true);
-
-                activityTableBody.addEventListener('click', (e) => {
-                    if (e.target.classList.contains('delete-activity-btn')) {
-                        const row = e.target.closest('tr');
-                        if (row) deleteActivity(row.dataset.id);
+                document.body.addEventListener('change', (e) => {
+                    const target = e.target;
+                    if (target.closest('.objective-block') && target.classList.contains('quarter-select')) {
+                        const block = target.closest('.objective-block');
+                        const krRow = target.closest('tr');
+                        const docId = block.dataset.id;
+                        const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        const krIndex = parseInt(krRow.dataset.index);
+                        const krs = objectivesCache[objIndex].data().krs || [];
+                        krs[krIndex]['quarter'] = target.value;
+                        updateObjective(docId, { krs });
+                    } else if (target.closest('#activity-table') && target.classList.contains('type-select')) {
+                        const row = target.closest('tr');
+                        updateActivity(row.dataset.id, { type: target.value });
+                    } else if (target.closest('#activity-table') && target.classList.contains('date-input')) {
+                         const row = target.closest('tr');
+                         const date = new Date(target.value);
+                         const week = isNaN(date.getTime()) ? '' : getWeekNumber(date);
+                         updateActivity(row.dataset.id, { date: target.value, week: week });
                     }
                 });
 
@@ -583,15 +625,16 @@
                 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
                 document.getElementById('guest-signin-btn').addEventListener('click', () => signInAnonymously(auth));
                 document.getElementById('sign-out-btn').addEventListener('click', signOutUser);
-                emailForm.addEventListener('submit', handleEmailAuth);
-                formToggleBtn.addEventListener('click', toggleAuthForm);
+                document.getElementById('email-form').addEventListener('submit', handleEmailAuth);
+                document.getElementById('form-toggle-btn').addEventListener('click', toggleAuthForm);
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
-                document.getElementById('year-filter').addEventListener('change', filterActivities);
-                document.getElementById('month-filter').addEventListener('change', filterActivities);
-                document.getElementById('week-filter').addEventListener('change', filterActivities);
+                document.getElementById('year-filter').addEventListener('change', () => { updateCascadingFilters(); filterActivities(); });
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
+                quarterActivityFilter.onChange = filterActivities;
+                monthFilter.onChange = filterActivities;
+                weekFilter.onChange = filterActivities;
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
