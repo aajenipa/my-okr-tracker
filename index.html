@@ -27,13 +27,37 @@
 <body class="p-4 sm:p-6 md:p-8">
 
     <!-- Login Screen -->
-    <div id="login-screen" class="fixed inset-0 bg-gray-100 z-50 flex flex-col justify-center items-center">
-        <h1 class="text-4xl font-bold text-gray-800 mb-2">My OKR Tracker</h1>
-        <p class="text-gray-600 mb-8">Please sign in to continue</p>
-        <button id="sign-in-btn" class="bg-white text-gray-700 font-semibold py-2 px-6 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 flex items-center">
-            <svg class="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#34A853" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#FBBC05" d="M24 48c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 41.258 16.227 48 24 48z"></path><path fill="#EA4335" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C44.438 36.372 48 30.656 48 24c0-1.341-.138-2.65-.389-3.917z"></path></svg>
-            Sign in with Google
-        </button>
+    <div id="login-screen" class="fixed inset-0 bg-gray-100 z-50 flex flex-col justify-center items-center p-4">
+        <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">My OKR Tracker</h1>
+            <p id="auth-error" class="text-red-500 text-sm text-center mb-4 h-5"></p>
+
+            <!-- Email/Password Form -->
+            <form id="email-form" class="space-y-4">
+                <input id="email-input" type="email" placeholder="Email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input id="password-input" type="password" placeholder="Password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button id="email-signin-btn" type="submit" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700">Sign In</button>
+                <button id="email-signup-btn" type="submit" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 hidden">Create Account</button>
+            </form>
+            <p class="text-center text-sm text-gray-500 my-4">
+                <span id="form-toggle-text">Need an account?</span>
+                <button id="form-toggle-btn" class="font-semibold text-indigo-600 hover:underline">Sign Up</button>
+            </p>
+
+            <!-- Divider -->
+            <div class="flex items-center my-4">
+                <hr class="flex-grow border-t border-gray-300"><span class="mx-4 text-gray-500 text-sm">OR</span><hr class="flex-grow border-t border-gray-300">
+            </div>
+
+            <!-- Social & Guest Login -->
+            <div class="space-y-3">
+                <button id="google-signin-btn" class="w-full bg-white text-gray-700 font-semibold py-2 px-6 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#34A853" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#FBBC05" d="M24 48c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 41.258 16.227 48 24 48z"></path><path fill="#EA4335" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C44.438 36.372 48 30.656 48 24c0-1.341-.138-2.65-.389-3.917z"></path></svg>
+                    Sign in with Google
+                </button>
+                <button id="guest-signin-btn" class="w-full text-sm text-gray-600 hover:underline">Continue as Guest</button>
+            </div>
+        </div>
     </div>
 
     <!-- Loading Spinner -->
@@ -53,7 +77,6 @@
                 <button id="sign-out-btn" class="text-xs text-indigo-600 hover:underline mt-1">Sign Out</button>
             </div>
         </div>
-
         <div class="border-b border-gray-200 mb-6">
             <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                 <button onclick="changeTab(event, 'activity')" class="tab-button active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg">Activity Tracker</button>
@@ -95,7 +118,7 @@
     <script type="module">
         // --- Firebase SDK Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, EmailAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously, signOut, linkWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, addDoc, setDoc, deleteDoc, onSnapshot, query, getDocs, writeBatch, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
@@ -115,35 +138,70 @@
         let objectivesCache = [];
         let activitiesCache = [];
         let dateSortDirection = 'desc';
+        let isSigningUp = false;
 
-        // --- General UI ---
+        // --- UI Elements ---
         const loginScreen = document.getElementById('login-screen');
         const loader = document.getElementById('loader');
         const appContent = document.getElementById('app-content');
-        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        window.changeTab = (event, tabID) => {
-            document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = "none");
-            document.querySelectorAll('.tab-button').forEach(tb => tb.classList.remove('active'));
-            document.getElementById(tabID).style.display = "block";
-            event.currentTarget.classList.add('active');
+        const emailForm = document.getElementById('email-form');
+        const emailInput = document.getElementById('email-input');
+        const passwordInput = document.getElementById('password-input');
+        const emailSigninBtn = document.getElementById('email-signin-btn');
+        const emailSignupBtn = document.getElementById('email-signup-btn');
+        const formToggleText = document.getElementById('form-toggle-text');
+        const formToggleBtn = document.getElementById('form-toggle-btn');
+        const authError = document.getElementById('auth-error');
+
+        // --- General UI Functions ---
+        const showLogin = () => { loginScreen.style.display = 'flex'; loader.style.display = 'none'; appContent.classList.add('hidden'); };
+        const showLoader = () => { loginScreen.style.display = 'none'; loader.style.display = 'flex'; appContent.classList.add('hidden'); };
+        const showApp = () => { loginScreen.style.display = 'none'; loader.style.display = 'none'; appContent.classList.remove('hidden'); };
+        
+        // --- Authentication Functions ---
+        const signInWithGoogle = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                const result = await signInWithPopup(auth, provider);
+                if (auth.currentUser?.isAnonymous) {
+                    const credential = GoogleAuthProvider.credentialFromResult(result);
+                    await linkWithCredential(auth.currentUser, credential);
+                }
+            } catch (error) {
+                authError.textContent = error.message;
+                console.error("Google Sign-In Error:", error);
+            }
         };
 
-        const showLogin = () => {
-            appContent.classList.add('hidden');
-            loader.style.display = 'none';
-            loginScreen.style.display = 'flex';
+        const signOutUser = () => signOut(auth);
+
+        const handleEmailAuth = async (event) => {
+            event.preventDefault();
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            authError.textContent = '';
+            try {
+                if (isSigningUp) {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    if (auth.currentUser?.isAnonymous) {
+                        const credential = EmailAuthProvider.credential(email, password);
+                        await linkWithCredential(auth.currentUser, credential);
+                    }
+                } else {
+                    await signInWithEmailAndPassword(auth, email, password);
+                }
+            } catch (error) {
+                authError.textContent = error.message;
+            }
         };
 
-        const showLoader = () => {
-            loginScreen.style.display = 'none';
-            appContent.classList.add('hidden');
-            loader.style.display = 'flex';
-        };
-
-        const showApp = () => {
-            loginScreen.style.display = 'none';
-            loader.style.display = 'none';
-            appContent.classList.remove('hidden');
+        const toggleAuthForm = () => {
+            isSigningUp = !isSigningUp;
+            emailSigninBtn.classList.toggle('hidden');
+            emailSignupBtn.classList.toggle('hidden');
+            formToggleText.textContent = isSigningUp ? 'Already have an account?' : 'Need an account?';
+            formToggleBtn.textContent = isSigningUp ? 'Sign In' : 'Sign Up';
+            authError.textContent = '';
         };
 
         // --- Activity Tracker UI & Logic ---
@@ -539,17 +597,11 @@
             try {
                 await signInWithPopup(auth, provider);
             } catch (error) {
-                console.error("Error signing in with Google", error);
+                authError.textContent = error.message;
             }
         };
 
-        const signOutUser = async () => {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                console.error("Error signing out", error);
-            }
-        };
+        const signOutUser = () => signOut(auth);
 
         async function initialize() {
             try {
