@@ -6,6 +6,8 @@
     <title>Live OKR Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Litepicker for Date Range -->
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .tab-button.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff; }
@@ -82,8 +84,7 @@
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Weekly Activity Log</h2>
                     <div class="flex items-end space-x-2 sm:space-x-4 flex-wrap">
-                        <div class="text-sm"><label for="start-date-filter" class="font-medium text-gray-600">Start Date:</label><input type="date" id="start-date-filter" class="p-2 border rounded-md bg-white"></div>
-                        <div class="text-sm"><label for="end-date-filter" class="font-medium text-gray-600">End Date:</label><input type="date" id="end-date-filter" class="p-2 border rounded-md bg-white"></div>
+                        <div class="text-sm"><label for="date-range-filter" class="font-medium text-gray-600">Date Range:</label><input type="text" id="date-range-filter" class="p-2 border rounded-md bg-white"></div>
                         <div class="text-sm"><label for="working-hours" class="font-medium text-gray-600">Weekly Hours:</label><input type="number" id="working-hours" value="40" class="w-20 p-2 border rounded-md text-center"></div>
                     </div>
                 </div>
@@ -133,6 +134,7 @@
         let activitiesCache = [];
         let dateSortDirection = 'desc';
         let isSigningUp = false;
+        let datePicker;
 
         // --- UI Elements ---
         const loginScreen = document.getElementById('login-screen');
@@ -208,22 +210,16 @@
         };
         
         const filterActivities = () => {
-            const startDateFilter = document.getElementById('start-date-filter').value;
-            const endDateFilter = document.getElementById('end-date-filter').value;
-            
-            const start = startDateFilter ? new Date(startDateFilter) : null;
-            const end = endDateFilter ? new Date(endDateFilter) : null;
-
-            if(start) start.setUTCHours(0,0,0,0);
-            if(end) end.setUTCHours(23,59,59,999);
+            const start = datePicker.getStartDate();
+            const end = datePicker.getEndDate();
 
             document.querySelectorAll('#activity-table tbody tr').forEach(row => {
                 const activityDateStr = row.querySelector('.date-input').value;
                 if (!activityDateStr) { row.style.display = 'none'; return; }
                 const activityDate = new Date(activityDateStr);
                 
-                const isAfterStart = !start || activityDate >= start;
-                const isBeforeEnd = !end || activityDate <= end;
+                const isAfterStart = !start || activityDate >= start.dateInstance;
+                const isBeforeEnd = !end || activityDate <= end.dateInstance;
 
                 row.style.display = (isAfterStart && isBeforeEnd) ? '' : 'none';
             });
@@ -545,8 +541,6 @@
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
-                document.getElementById('start-date-filter').addEventListener('change', filterActivities);
-                document.getElementById('end-date-filter').addEventListener('change', filterActivities);
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
 
                 onAuthStateChanged(auth, async (user) => {
