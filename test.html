@@ -542,7 +542,7 @@
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
-                
+
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
