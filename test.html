@@ -135,6 +135,7 @@
         let activitiesCache = [];
         let dateSortDirection = 'desc';
         let isSigningUp = false;
+        let summaryQuarterFilterInitialized = false; // --- [NEW] ---
 
         // --- UI Elements ---
         const loginScreen = document.getElementById('login-screen');
@@ -437,14 +438,16 @@
                     if (kr.quarter) uniqueQuarters.add(kr.quarter);
                 });
             });
-
-            const currentSelection = quarterFilter.value;
             quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
             Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
-            quarterFilter.value = Array.from(quarterFilter.options).some(opt => opt.value === currentSelection) ? currentSelection : 'all';
+                
+            // Always "all" on load
+            if (!summaryQuarterFilterInitialized) {
+                quarterFilter.value = 'all';
+                summaryQuarterFilterInitialized = true;
+            }
         };
 
-        // --- [UPDATED] filterSummaryByQuarter function ---
         const filterSummaryByQuarter = () => {
             const selectedQuarter = document.getElementById('quarter-summary-filter').value;
             document.querySelectorAll('.objective-block').forEach(block => {
