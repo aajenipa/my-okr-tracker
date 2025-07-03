@@ -26,6 +26,7 @@
 </head>
 <body class="p-4 sm:p-6 md:p-8">
 
+    <!-- Login Screen -->
     <div id="login-screen" class="fixed inset-0 bg-gray-100 z-50 flex flex-col justify-center items-center p-4">
         <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg">
             <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">My OKR Tracker</h1>
@@ -53,6 +54,7 @@
         </div>
     </div>
 
+    <!-- Loading Spinner -->
     <div id="loader" class="fixed inset-0 bg-white bg-opacity-75 z-50 justify-center items-center hidden">
         <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
     </div>
@@ -251,11 +253,6 @@
             populate(quarterFilter, quarters, 'All Quarters', q => q);
             populate(monthFilter, months, 'All Months', m => monthNames[m]);
             populate(weekFilter, weeks, 'All Weeks', w => `Week ${w}`);
-
-            if (!filtersInitialized) {
-                filterActivities();
-                filtersInitialized = true;
-            }
         };
 
         const filterActivities = () => {
@@ -281,21 +278,44 @@
             calculateUtilization();
         };
         
+        // --- [FIXED] Utilization Calculation ---
+        // This function now calculates metrics directly from the data cache (`activitiesCache`)
+        // instead of reading from the HTML table. This is more reliable and avoids
+        // issues on page load.
         const calculateUtilization = () => {
             const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
+            const year = document.getElementById('year-filter').value;
+            const quarter = document.getElementById('quarter-activity-filter').value;
+            const month = document.getElementById('month-filter').value;
+            const week = document.getElementById('week-filter').value;
+
             let totalWorkedHours = 0, billableHoursSum = 0, totalTimeOffHours = 0;
             const weeksInSelection = new Set();
-            
-            const rowsToConsider = Array.from(document.querySelectorAll('#activity-table tbody tr')).filter(row => row.style.display !== 'none');
-            
-            rowsToConsider.forEach(row => {
-                const type = row.querySelector('.type-select').value;
-                const hours = parseFloat(row.querySelector('.total-hours').textContent) || 0;
-                weeksInSelection.add(row.querySelector('.week').textContent);
+
+            const filteredActivities = activitiesCache.filter(activity => {
+                if (!activity.date || !activity.week) return false;
+                const activityDate = new Date(activity.date);
+                if (isNaN(activityDate.getTime())) return false;
+
+                const activityWeek = activity.week.toString();
+                const activityQuarter = getQuarterFromWeek(parseInt(activityWeek));
+                
+                const yearMatch = year === 'all' || activityDate.getUTCFullYear().toString() === year;
+                const quarterMatch = quarter === 'all' || activityQuarter === quarter;
+                const monthMatch = month === 'all' || activityDate.getUTCMonth().toString() === month;
+                const weekMatch = week === 'all' || activityWeek === week;
+
+                return yearMatch && quarterMatch && monthMatch && weekMatch;
+            });
+
+            filteredActivities.forEach(activity => {
+                const type = activity.type;
+                const hours = parseFloat(activity.totalHours) || 0;
+                weeksInSelection.add(activity.week);
                 
                 if (type === 'Work') {
                     totalWorkedHours += hours;
-                    billableHoursSum += parseFloat(row.querySelector('.billable-hours').textContent) || 0;
+                    billableHoursSum += parseFloat(activity.billableHours) || 0;
                 } else {
                     totalTimeOffHours += hours;
                 }
@@ -326,7 +346,7 @@
                 row.dataset.id = data.id;
                 row.innerHTML = `
                     <td class="week">${data.week || ''}</td>
-                    <td><input type="date" value="${data.date || ''}" class="date-input" min="2025-01-01" max="2100-12-31"></td>
+                    <td><input type="date" value="${data.date || ''}" class="date-input" min="2020-01-01" max="2100-12-31"></td>
                     <td><select class="type-select"><option value="Work" ${data.type === 'Work' ? 'selected' : ''}>Work</option><option value="PTO" ${data.type === 'PTO' ? 'selected' : ''}>PTO</option><option value="Holiday" ${data.type === 'Holiday' ? 'selected' : ''}>Holiday</option></select></td>
                     <td contenteditable="true">${data.project || ''}</td>
                     <td contenteditable="true">${data.action || ''}</td>
@@ -522,6 +542,7 @@
                         const objectiveBlock = target.closest('.objective-block');
                         const docId = objectiveBlock.dataset.id;
                         const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        if (objIndex === -1) return; // a safety check
                         if (target.classList.contains('delete-objective-btn')) deleteObjective(docId);
                         else if (target.classList.contains('add-kr-btn')) addKR(docId, objectivesCache[objIndex].data().krs || []);
                         else if (target.closest('.move-up')) moveObjective(objIndex, 'up');
@@ -542,6 +563,7 @@
                         const block = target.closest('.objective-block');
                         const docId = block.dataset.id;
                         const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        if (objIndex === -1) return;
                         if (target.tagName === 'H3') {
                             updateObjective(docId, { title: target.textContent });
                         } else if (target.closest('tr')) {
@@ -572,6 +594,7 @@
                         const krRow = target.closest('tr');
                         const docId = block.dataset.id;
                         const objIndex = objectivesCache.findIndex(d => d.id === docId);
+                        if (objIndex === -1) return;
                         const krIndex = parseInt(krRow.dataset.index);
                         const krs = objectivesCache[objIndex].data().krs || [];
                         krs[krIndex]['quarter'] = target.value;
@@ -601,6 +624,12 @@
                 document.getElementById('month-filter').addEventListener('change', filterActivities);
                 document.getElementById('week-filter').addEventListener('change', filterActivities);
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
+                // --- [FIXED] Added listener for working hours input ---
+                document.getElementById('working-hours').addEventListener('input', () => {
+                    calculateUtilization();
+                    renderQuarterlySummaryCards();
+                });
+
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -615,7 +644,7 @@
                             activitiesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             renderActivityTable();
                             populateDateFilters();
-                            filterActivities(); // <-- Call filter after populating
+                            filterActivities();
                             renderQuarterlySummaryCards();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
