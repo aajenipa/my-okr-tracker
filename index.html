@@ -128,7 +128,8 @@
 
         // --- App State ---
         let db, auth, userId;
-        let activitiesUnsubscribe, objectivesUnsubscribe;
+        let activitiesUnsubscribe = () => {};
+        let objectivesUnsubscribe = () => {};
         let objectivesCache = [];
         let activitiesCache = [];
         let dateSortDirection = 'desc';
@@ -146,6 +147,8 @@
         const formToggleText = document.getElementById('form-toggle-text');
         const formToggleBtn = document.getElementById('form-toggle-btn');
         const authError = document.getElementById('auth-error');
+        const activityTableBody = document.getElementById('activity-table').querySelector('tbody');
+        const objectivesContainer = document.getElementById('objectives-container');
 
         // --- General UI Functions ---
         const showLogin = () => { loginScreen.style.display = 'flex'; loader.style.display = 'none'; appContent.classList.add('hidden'); };
@@ -206,8 +209,6 @@
         };
 
         // --- Activity Tracker UI & Logic ---
-        const activityTableBody = document.getElementById('activity-table').querySelector('tbody');
-        
         const getWeekNumber = (d) => {
             d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
             d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -368,8 +369,6 @@
         const deleteActivity = (id) => deleteDoc(doc(db, `users/${userId}/activities`, id));
         
         // --- Objectives UI & Logic ---
-        const objectivesContainer = document.getElementById('objectives-container');
-
         const updateProgress = () => {
             document.querySelectorAll('.summary-table tbody tr').forEach(row => {
                 const target = parseFloat(row.cells[2].textContent.replace(/[^0-9.]/g, ''));
