@@ -101,7 +101,8 @@
             <div id="summary" class="tab-content">
                  <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Quarterly Achievements Summary</h2>
-                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-filter" class="p-2 border rounded-md bg-white"></select></div>
+                    <!-- [NEW] Independent quarter filter for the summary tab -->
+                    <div class="text-sm"><label for="quarter-summary-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-summary-filter" class="p-2 border rounded-md bg-white"></select></div>
                  </div>
                  <div id="quarterly-summary-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></div>
                  <div id="objectives-container" class="space-y-8"></div>
@@ -303,9 +304,6 @@
             calculateUtilization();
         };
         
-        // --- [FIXED] Utilization Calculation ---
-        // This function now reads data from the visible rows in the DOM. This ensures it's always
-        // in sync with what the user sees after the `filterActivities` function has run.
         const calculateUtilization = () => {
             const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
             let totalWorkedHours = 0, billableHoursSum = 0, totalTimeOffHours = 0;
@@ -383,17 +381,27 @@
                 }
             });
         };
-        const populateQuarterFilter = () => {
-            const quarterCells = document.querySelectorAll('#summary .quarter-select');
-            const quarterFilter = document.getElementById('quarter-filter');
-            const uniqueQuarters = new Set(Array.from(quarterCells).map(cell => cell.value).filter(Boolean));
+
+        const populateSummaryQuarterFilter = () => {
+            const quarterFilter = document.getElementById('quarter-summary-filter');
+            const uniqueQuarters = new Set();
+            activitiesCache.forEach(activity => {
+                if(activity.week) uniqueQuarters.add(getQuarterFromWeek(activity.week));
+            });
+            objectivesCache.forEach(obj => {
+                (obj.data().krs || []).forEach(kr => {
+                    if (kr.quarter) uniqueQuarters.add(kr.quarter);
+                });
+            });
+
             const currentSelection = quarterFilter.value;
             quarterFilter.innerHTML = '<option value="all">All Quarters</option>';
             Array.from(uniqueQuarters).sort().forEach(q => quarterFilter.innerHTML += `<option value="${q}">${q}</option>`);
             quarterFilter.value = Array.from(quarterFilter.options).some(opt => opt.value === currentSelection) ? currentSelection : 'all';
         };
+
         const filterSummaryByQuarter = () => {
-            const selectedQuarter = document.getElementById('quarter-filter').value;
+            const selectedQuarter = document.getElementById('quarter-summary-filter').value;
             document.querySelectorAll('.objective-block').forEach(block => {
                 let hasVisibleRows = false;
                 block.querySelectorAll('tbody tr').forEach(row => {
@@ -407,16 +415,19 @@
                 block.style.display = hasVisibleRows ? 'block' : 'none';
             });
         };
+
         const renderQuarterlySummaryCards = () => {
             const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
-            const selectedQuarter = document.getElementById('quarter-filter').value;
+            const selectedQuarter = document.getElementById('quarter-summary-filter').value;
             let totalWorkedHours = 0, billableHoursSum = 0, totalTimeOffHours = 0;
             const weeksInSelection = new Set();
+            
             const rowsToConsider = activitiesCache.filter(activity => {
                 if (!activity.week) return false;
                 if (selectedQuarter === 'all') return true;
                 return getQuarterFromWeek(activity.week) === selectedQuarter;
             });
+
             rowsToConsider.forEach(activity => {
                 weeksInSelection.add(activity.week);
                 if (activity.type === 'Work') {
@@ -426,12 +437,14 @@
                     totalTimeOffHours += parseFloat(activity.totalHours) || 0;
                 }
             });
-            const numWeeks = weeksInSelection.size || 1;
+
+            const numWeeks = weeksInSelection.size || (selectedQuarter === 'all' ? 52 : 13);
             const totalAvailableHours = (workingHoursPerWeek * numWeeks) - totalTimeOffHours;
-            const basedOnText = selectedQuarter === 'all' ? `Across all quarters` : `Across ${numWeeks} week(s) in ${selectedQuarter}`;
+            const basedOnText = selectedQuarter === 'all' ? `Across all quarters` : `Across ${weeksInSelection.size} week(s) in ${selectedQuarter}`;
             const effectiveUtilization = (totalWorkedHours > 0 && totalAvailableHours > 0) ? (totalWorkedHours / totalAvailableHours) * 100 : 0;
             const billableUtilization = (totalWorkedHours > 0) ? (billableHoursSum / totalWorkedHours) * 100 : 0;
             let totalProgress = 0, krCount = 0;
+
             objectivesCache.forEach(objDoc => {
                 const objectiveData = objDoc.data();
                 (objectiveData.krs || []).forEach(kr => {
@@ -447,13 +460,14 @@
                 });
             });
             const averageOkrProgress = krCount > 0 ? totalProgress / krCount : 0;
+            const quarterLabel = selectedQuarter === 'all' ? 'All Quarters' : selectedQuarter;
             document.getElementById('quarterly-summary-cards').innerHTML = `
-                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (${selectedQuarter})</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalWorkedHours.toFixed(1)}</p></div>
+                <div class="bg-blue-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-blue-800">Total Hours (${quarterLabel})</h3><p class="mt-1 text-3xl font-semibold text-blue-900">${totalWorkedHours.toFixed(1)}</p></div>
                 <div class="bg-green-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-green-800">Effective Utilization</h3><p class="mt-1 text-3xl font-semibold text-green-900">${effectiveUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">${basedOnText}</p></div>
                 <div class="bg-purple-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-purple-800">Billable Utilization</h3><p class="mt-1 text-3xl font-semibold text-purple-900">${billableUtilization.toFixed(1)}%</p><p class="text-xs text-gray-500">Of total hours in selection</p></div>
-                <div class="bg-yellow-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-yellow-800">Overall OKR Progress</h3><p class="mt-1 text-3xl font-semibold text-yellow-900">${averageOkrProgress.toFixed(0)}%</p><p class="text-xs text-gray-500">Avg. of ${krCount} KRs in selection</p></div>`;
+                <div class="bg-yellow-50 p-4 rounded-lg shadow"><h3 class="text-sm font-medium text-yellow-800">Overall OKR Progress</h3><p class="mt-1 text-3xl font-semibold text-yellow-900">${averageOkrProgress.toFixed(0)}%</p><p class="text-xs text-gray-500">Avg. of ${krCount} KRs in ${quarterLabel}</p></div>`;
         };
-        const handleQuarterFilterChange = () => { filterSummaryByQuarter(); renderQuarterlySummaryCards(); };
+
         const renderObjectives = () => {
             objectivesContainer.innerHTML = '';
             objectivesCache.forEach((doc, index) => {
@@ -492,7 +506,6 @@
                 objectivesContainer.appendChild(block);
             });
             updateProgress();
-            populateQuarterFilter();
             filterSummaryByQuarter();
         };
         const addObjective = () => { const newOrder = objectivesCache.length > 0 ? Math.max(...objectivesCache.map(o => o.data().order || 0)) + 1 : 0; addDoc(collection(db, `users/${userId}/objectives`), { title: 'New Objective', krs: [{ quarter: getQuarterFromDate(new Date()), result: '', target: '', actual: '', notes: '' }], order: newOrder, createdAt: new Date() }); };
@@ -627,21 +640,18 @@
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
                 
-                document.getElementById('year-filter').addEventListener('change', () => {
-                    populateDateFilters();
-                    filterActivities();
-                });
-                document.getElementById('quarter-activity-filter').addEventListener('change', () => {
-                    populateDateFilters();
-                    filterActivities();
-                });
-                document.getElementById('month-filter').addEventListener('change', () => {
-                    populateDateFilters();
-                    filterActivities();
-                });
+                // Activity Tab Filter Listeners
+                document.getElementById('year-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
+                document.getElementById('quarter-activity-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
+                document.getElementById('month-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
                 document.getElementById('week-filter').addEventListener('change', filterActivities);
                 
-                document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
+                // Summary Tab Filter Listener
+                document.getElementById('quarter-summary-filter').addEventListener('change', () => {
+                    renderQuarterlySummaryCards();
+                    filterSummaryByQuarter();
+                });
+
                 document.getElementById('working-hours').addEventListener('input', () => {
                     calculateUtilization();
                     renderQuarterlySummaryCards();
@@ -662,12 +672,14 @@
                             renderActivityTable();
                             populateDateFilters();
                             filterActivities();
+                            populateSummaryQuarterFilter();
                             renderQuarterlySummaryCards();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
                         objectivesUnsubscribe = onSnapshot(objectivesQuery, snapshot => {
                             objectivesCache = snapshot.docs;
                             renderObjectives();
+                            populateSummaryQuarterFilter();
                             renderQuarterlySummaryCards();
                         });
                         showApp();
