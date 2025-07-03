@@ -101,7 +101,6 @@
             <div id="summary" class="tab-content">
                  <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Quarterly Achievements Summary</h2>
-                    <!-- [NEW] Independent quarter filter for the summary tab -->
                     <div class="text-sm"><label for="quarter-summary-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-summary-filter" class="p-2 border rounded-md bg-white"></select></div>
                  </div>
                  <div id="quarterly-summary-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></div>
@@ -195,11 +194,16 @@
         };
 
         // --- Activity Tracker Logic ---
+        // --- [UPDATED] Week calculation starts on Sunday ---
         const getWeekNumber = (d) => {
-            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            // Copy date to avoid modifying the original
+            const targetDate = new Date(d.valueOf());
+            // Get the day number of the year (1-366)
+            const dayNum = Math.floor((targetDate - new Date(targetDate.getFullYear(), 0, 1)) / 86400000) + 1;
+            // Get the day of the week for Jan 1st (0=Sun, 1=Mon, etc)
+            const jan1Day = new Date(targetDate.getFullYear(), 0, 1).getDay();
+            // Calculate the week number
+            return Math.ceil((dayNum + jan1Day) / 7);
         };
         const getQuarterFromWeek = (week) => {
             if (week <= 13) return 'Q1'; if (week <= 26) return 'Q2'; if (week <= 39) return 'Q3'; return 'Q4';
