@@ -332,6 +332,7 @@
                     <td contenteditable="true" class="billable-hours">${data.billableHours || 0}</td>
                     <td class="text-center"><button class="delete-activity-btn text-red-500 hover:text-red-700 text-xs">Delete</button></td>`;
             });
+                filterActivities(); // <--- ADD THIS LINE!
         };
         const toggleDateSort = () => { dateSortDirection = dateSortDirection === 'desc' ? 'asc' : 'desc'; document.getElementById('date-sort-btn').innerHTML = dateSortDirection === 'desc' ? '↓' : '↑'; renderActivityTable(); };
         const addActivityRow = () => addDoc(collection(db, `users/${userId}/activities`), { date: new Date().toISOString().split('T')[0], week: getWeekNumber(new Date()), type: 'Work', project: '', action: '', status: 'New', totalHours: 0, billableHours: 0, createdAt: new Date() });
