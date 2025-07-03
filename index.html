@@ -549,48 +549,43 @@
 
         // --- Firebase Initialization and Auth ---
         
-        async function seedInitialData(userId) {
-            const objectivesRef = collection(db, `users/${userId}/objectives`);
-            const objectivesSnapshot = await getDocs(query(objectivesRef));
-            if (objectivesSnapshot.empty) {
-                const batch = writeBatch(db);
-                
-                const activitiesRef = collection(db, `users/${userId}/activities`);
-                const sampleActivities = [
-                    { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
-                    { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
-                ];
-                sampleActivities.forEach(activity => {
-                    batch.set(doc(activitiesRef), activity);
-                });
-
-                const sampleObjectives = [
-                    { 
-                        title: "Drive High-Impact Project Delivery", 
-                        order: 0,
-                        createdAt: new Date(),
-                        krs: [
-                            { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Consistently billed over 34 hours per week." },
-                            { quarter: "Q3", result: "Successfully deliver all milestones for Project Alpha on or before the deadline.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." }
-                        ]
-                    },
-                    {
-                        title: "Enhance Professional Skills",
-                        order: 1,
-                        createdAt: new Date(),
-                        krs: [
-                            { quarter: "Q3", result: "Complete 2 professional development courses.", target: "2", actual: "1", notes: "Completed Data Viz course. Scheduled PM course." },
-                            { quarter: "Q4", result: "Mentor one junior team member.", target: "1", actual: "0", notes: "Scheduled first session with Alex." }
-                        ]
-                    }
-                ];
-                sampleObjectives.forEach(obj => {
-                    batch.set(doc(objectivesRef), obj);
-                });
-
-                await batch.commit();
-            }
+async function seedInitialData(userId) {
+    const objectivesRef = collection(db, `users/${userId}/objectives`);
+    const activitiesRef = collection(db, `users/${userId}/activities`);
+    const objectivesSnapshot = await getDocs(query(objectivesRef));
+    if (objectivesSnapshot.empty) {
+        const sampleActivities = [
+            { date: '2025-07-02', week: 27, project: 'Project Alpha', action: 'Initial user research and summarized findings.', status: 'Completed', totalHours: 8, billableHours: 8, createdAt: new Date() },
+            { date: '2025-07-08', week: 28, project: 'Project Beta', action: 'Kick-off meeting and requirements gathering.', status: 'In Progress', totalHours: 6, billableHours: 6, createdAt: new Date() }
+        ];
+        for (const activity of sampleActivities) {
+            await addDoc(activitiesRef, activity);
         }
+        const sampleObjectives = [
+            { 
+                title: "Drive High-Impact Project Delivery", 
+                order: 0,
+                createdAt: new Date(),
+                krs: [
+                    { quarter: "Q3", result: "Achieve >85% billable utilization.", target: "85", actual: "88", notes: "Consistently billed over 34 hours per week." },
+                    { quarter: "Q3", result: "Successfully deliver all milestones for Project Alpha on or before the deadline.", target: "100", actual: "100", notes: "Phase 1 & 2 completed." }
+                ]
+            },
+            {
+                title: "Enhance Professional Skills",
+                order: 1,
+                createdAt: new Date(),
+                krs: [
+                    { quarter: "Q3", result: "Complete 2 professional development courses.", target: "2", actual: "1", notes: "Completed Data Viz course. Scheduled PM course." },
+                    { quarter: "Q4", result: "Mentor one junior team member.", target: "1", actual: "0", notes: "Scheduled first session with Alex." }
+                ]
+            }
+        ];
+        for (const obj of sampleObjectives) {
+            await addDoc(objectivesRef, obj);
+        }
+    }
+}
         
         async function initialize() {
             try {
