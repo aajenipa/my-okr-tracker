@@ -12,7 +12,7 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         [contenteditable="true"]:focus { outline: 2px solid #4f46e5; background-color: #fff; border-radius: 4px; }
-        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; vertical-align: middle; }
         th { background-color: #f9fafb; font-weight: 600; }
         .table-container { overflow-x: auto; }
         .add-row-btn { transition: all 0.2s ease-in-out; }
@@ -31,8 +31,6 @@
         <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg">
             <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">My OKR Tracker</h1>
             <p id="auth-error" class="text-red-500 text-sm text-center mb-4 h-5"></p>
-
-            <!-- Email/Password Form -->
             <form id="email-form" class="space-y-4">
                 <input id="email-input" type="email" placeholder="Email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <input id="password-input" type="password" placeholder="Password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -43,13 +41,9 @@
                 <span id="form-toggle-text">Need an account?</span>
                 <button id="form-toggle-btn" class="font-semibold text-indigo-600 hover:underline">Sign Up</button>
             </p>
-
-            <!-- Divider -->
             <div class="flex items-center my-4">
                 <hr class="flex-grow border-t border-gray-300"><span class="mx-4 text-gray-500 text-sm">OR</span><hr class="flex-grow border-t border-gray-300">
             </div>
-
-            <!-- Social & Guest Login -->
             <div class="space-y-3">
                 <button id="google-signin-btn" class="w-full bg-white text-gray-700 font-semibold py-2 px-6 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 flex items-center justify-center">
                     <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#34A853" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#FBBC05" d="M24 48c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 41.258 16.227 48 24 48z"></path><path fill="#EA4335" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C44.438 36.372 48 30.656 48 24c0-1.341-.138-2.65-.389-3.917z"></path></svg>
@@ -106,7 +100,7 @@
             <div id="summary" class="tab-content">
                  <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Quarterly Achievements Summary</h2>
-                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-filter" onchange="handleQuarterFilterChange()" class="p-2 border rounded-md bg-white"></select></div>
+                    <div class="text-sm"><label for="quarter-filter" class="font-medium text-gray-600">Filter by Quarter:</label><select id="quarter-filter" class="p-2 border rounded-md bg-white"></select></div>
                  </div>
                  <div id="quarterly-summary-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></div>
                  <div id="objectives-container" class="space-y-8"></div>
@@ -617,6 +611,7 @@
                 document.getElementById('year-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
                 document.getElementById('month-filter').addEventListener('change', () => { populateDateFilters(); filterActivities(); });
                 document.getElementById('week-filter').addEventListener('change', filterActivities);
+                document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
