@@ -464,11 +464,6 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Initialize Slim Select
-                quarterActivityFilter = new SlimSelect({ select: '#quarter-activity-filter', settings: { placeholderText: 'All Quarters' } });
-                monthFilter = new SlimSelect({ select: '#month-filter', settings: { placeholderText: 'All Months' } });
-                weekFilter = new SlimSelect({ select: '#week-filter', settings: { placeholderText: 'All Weeks' } });
-
                 // Event Delegation for dynamic content
                 document.body.addEventListener('click', (e) => {
                     const target = e.target;
@@ -550,11 +545,9 @@
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
-                document.getElementById('year-filter').addEventListener('change', () => { updateCascadingFilters(); filterActivities(); });
+                document.getElementById('start-date-filter').addEventListener('change', filterActivities);
+                document.getElementById('end-date-filter').addEventListener('change', filterActivities);
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
-                quarterActivityFilter.onChange = filterActivities;
-                monthFilter.onChange = filterActivities;
-                weekFilter.onChange = filterActivities;
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -568,7 +561,6 @@
                         activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
                             activitiesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             renderActivityTable();
-                            populateDateFilters();
                             renderQuarterlySummaryCards();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
