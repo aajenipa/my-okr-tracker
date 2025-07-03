@@ -6,8 +6,9 @@
     <title>Live OKR Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Litepicker for Date Range -->
-    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+    <!-- Slim Select Library for Multi-select dropdowns -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/slim-select/2.8.2/slimselect.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/slim-select/2.8.2/slimselect.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .tab-button.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff; }
@@ -24,6 +25,7 @@
         #loader { display: flex; }
         .control-arrow, .sort-arrow { cursor: pointer; }
         .control-arrow:hover, .sort-arrow:hover { color: #4f46e5; }
+        .ss-main { min-width: 120px; }
     </style>
 </head>
 <body class="p-4 sm:p-6 md:p-8">
@@ -84,7 +86,10 @@
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h2 class="text-xl font-semibold text-gray-700">Weekly Activity Log</h2>
                     <div class="flex items-end space-x-2 sm:space-x-4 flex-wrap">
-                        <div class="text-sm"><label for="date-range-filter" class="font-medium text-gray-600">Date Range:</label><input type="text" id="date-range-filter" class="p-2 border rounded-md bg-white"></div>
+                        <div class="text-sm"><label for="year-filter" class="font-medium text-gray-600">Year:</label><select id="year-filter" class="p-2 border rounded-md bg-white"></select></div>
+                        <div class="text-sm"><label for="quarter-activity-filter" class="font-medium text-gray-600">Quarter:</label><select id="quarter-activity-filter" multiple></select></div>
+                        <div class="text-sm"><label for="month-filter" class="font-medium text-gray-600">Month:</label><select id="month-filter" multiple></select></div>
+                        <div class="text-sm"><label for="week-filter" class="font-medium text-gray-600">Week:</label><select id="week-filter" multiple></select></div>
                         <div class="text-sm"><label for="working-hours" class="font-medium text-gray-600">Weekly Hours:</label><input type="number" id="working-hours" value="40" class="w-20 p-2 border rounded-md text-center"></div>
                     </div>
                 </div>
@@ -134,7 +139,7 @@
         let activitiesCache = [];
         let dateSortDirection = 'desc';
         let isSigningUp = false;
-        let datePicker;
+        let quarterActivityFilter, monthFilter, weekFilter;
 
         // --- UI Elements ---
         const loginScreen = document.getElementById('login-screen');
@@ -200,6 +205,16 @@
             const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
             return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
         };
+        const getDateRangeOfWeek = (year, week) => {
+            const d = new Date(Date.UTC(year, 0, 4)); // Jan 4th is always in week 1
+            d.setUTCDate(d.getUTCDate() + (week - 1) * 7);
+            const day = d.getUTCDay(); // 0=Sun, 1=Mon...
+            const sunday = new Date(d);
+            sunday.setUTCDate(d.getUTCDate() - day);
+            const saturday = new Date(sunday);
+            saturday.setUTCDate(sunday.getUTCDate() + 6);
+            return { start: sunday, end: saturday };
+        };
         const getQuarterFromWeek = (week) => {
             if (week <= 13) return 'Q1'; if (week <= 26) return 'Q2'; if (week <= 39) return 'Q3'; return 'Q4';
         };
@@ -208,20 +223,81 @@
             const month = date.getMonth(); // 0-11
             if (month < 3) return 'Q1'; if (month < 6) return 'Q2'; if (month < 9) return 'Q3'; return 'Q4';
         };
-        
+
+        const populateDateFilters = () => {
+            const yearFilter = document.getElementById('year-filter');
+            const years = new Set();
+            activitiesCache.forEach(activity => {
+                if (activity.date) {
+                    const date = new Date(activity.date);
+                    if (!isNaN(date.getTime())) years.add(date.getUTCFullYear());
+                }
+            });
+            const currentYear = yearFilter.value;
+            yearFilter.innerHTML = '<option value="all">All Years</option>';
+            Array.from(years).sort((a,b) => b-a).forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
+            yearFilter.value = Array.from(yearFilter.options).some(o => o.value === currentYear) ? currentYear : 'all';
+            
+            updateCascadingFilters();
+        };
+
+        const updateCascadingFilters = () => {
+            const year = document.getElementById('year-filter').value;
+            const quarters = new Set(), months = new Set(), weekYearMap = {};
+
+            activitiesCache.forEach(activity => {
+                if (!activity.date) return;
+                const date = new Date(activity.date);
+                if (isNaN(date.getTime())) return;
+                if (year !== 'all' && date.getUTCFullYear().toString() !== year) return;
+
+                const week = activity.week;
+                if(week) {
+                    quarters.add(getQuarterFromWeek(week));
+                    months.add(date.getUTCMonth());
+                    if (!weekYearMap[week]) {
+                        weekYearMap[week] = date.getUTCFullYear();
+                    }
+                }
+            });
+
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            
+            const populateMulti = (slimSelectInstance, options, formatter) => {
+                const data = Array.from(options).sort((a,b) => a-b).map(opt => ({ text: formatter(opt), value: opt.toString() }));
+                slimSelectInstance.setData(data);
+            };
+
+            populateMulti(quarterActivityFilter, quarters, q => q);
+            populateMulti(monthFilter, months, m => monthNames[m]);
+            populateMulti(weekFilter, Object.keys(weekYearMap), w => {
+                const yearForWeek = weekYearMap[w];
+                const range = getDateRangeOfWeek(yearForWeek, parseInt(w));
+                const start = `${String(range.start.getUTCMonth() + 1).padStart(2, '0')}/${String(range.start.getUTCDate()).padStart(2, '0')}`;
+                const end = `${String(range.end.getUTCMonth() + 1).padStart(2, '0')}/${String(range.end.getUTCDate()).padStart(2, '0')}`;
+                return `${start} - ${end}`;
+            });
+        };
+
         const filterActivities = () => {
-            const start = datePicker.getStartDate();
-            const end = datePicker.getEndDate();
+            const year = document.getElementById('year-filter').value;
+            const quarters = quarterActivityFilter.getSelected();
+            const months = monthFilter.getSelected();
+            const weeks = weekFilter.getSelected();
 
             document.querySelectorAll('#activity-table tbody tr').forEach(row => {
                 const activityDateStr = row.querySelector('.date-input').value;
                 if (!activityDateStr) { row.style.display = 'none'; return; }
                 const activityDate = new Date(activityDateStr);
-                
-                const isAfterStart = !start || activityDate >= start.dateInstance;
-                const isBeforeEnd = !end || activityDate <= end.dateInstance;
+                const activityWeek = row.querySelector('.week').textContent;
+                const activityQuarter = getQuarterFromWeek(parseInt(activityWeek));
 
-                row.style.display = (isAfterStart && isBeforeEnd) ? '' : 'none';
+                const yearMatch = year === 'all' || activityDate.getUTCFullYear().toString() === year;
+                const quarterMatch = quarters.length === 0 || quarters.includes(activityQuarter);
+                const monthMatch = months.length === 0 || months.includes(activityDate.getUTCMonth().toString());
+                const weekMatch = weeks.length === 0 || weeks.includes(activityWeek);
+
+                row.style.display = (yearMatch && quarterMatch && monthMatch && weekMatch) ? '' : 'none';
             });
             calculateUtilization();
         };
@@ -460,6 +536,11 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
+                // Initialize Slim Select
+                quarterActivityFilter = new SlimSelect({ select: '#quarter-activity-filter', settings: { placeholderText: 'All Quarters' } });
+                monthFilter = new SlimSelect({ select: '#month-filter', settings: { placeholderText: 'All Months' } });
+                weekFilter = new SlimSelect({ select: '#week-filter', settings: { placeholderText: 'All Weeks' } });
+
                 // Event Delegation for dynamic content
                 document.body.addEventListener('click', (e) => {
                     const target = e.target;
@@ -541,7 +622,11 @@
                 document.getElementById('add-activity-row-btn').addEventListener('click', addActivityRow);
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
+                document.getElementById('year-filter').addEventListener('change', () => { updateCascadingFilters(); filterActivities(); });
                 document.getElementById('quarter-filter').addEventListener('change', handleQuarterFilterChange);
+                quarterActivityFilter.onChange = filterActivities;
+                monthFilter.onChange = filterActivities;
+                weekFilter.onChange = filterActivities;
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -555,6 +640,7 @@
                         activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
                             activitiesCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             renderActivityTable();
+                            populateDateFilters();
                             renderQuarterlySummaryCards();
                         });
                         const objectivesQuery = query(collection(db, `users/${userId}/objectives`), orderBy("order"));
