@@ -209,7 +209,6 @@
             if (month < 3) return 'Q1'; if (month < 6) return 'Q2'; if (month < 9) return 'Q3'; return 'Q4';
         };
 
-        // --- [NEW] Cascading Filter Logic ---
         const populateDateFilters = () => {
             const yearFilter = document.getElementById('year-filter');
             const quarterFilter = document.getElementById('quarter-activity-filter');
@@ -220,20 +219,17 @@
             const selectedQuarter = quarterFilter.value;
             const selectedMonth = monthFilter.value;
 
-            // Sets for available options
             const years = new Set();
             const quarters = new Set();
             const months = new Set();
             const weeks = new Set();
 
-            // 1. Determine available years (always all years from data)
             activitiesCache.forEach(activity => {
                 if (!activity.date) return;
                 const date = new Date(activity.date);
                 if (!isNaN(date.getTime())) years.add(date.getUTCFullYear());
             });
 
-            // 2. Determine available quarters based on selected year
             const activitiesInYear = activitiesCache.filter(activity => {
                  if (!activity.date) return false;
                  const date = new Date(activity.date);
@@ -243,7 +239,6 @@
                 if(activity.week) quarters.add(getQuarterFromWeek(activity.week));
             });
 
-            // 3. Determine available months based on selected year and quarter
             const activitiesInQuarter = activitiesInYear.filter(activity => {
                 return selectedQuarter === 'all' || (activity.week && getQuarterFromWeek(activity.week) === selectedQuarter);
             });
@@ -253,7 +248,6 @@
                 if (!isNaN(date.getTime())) months.add(date.getUTCMonth());
             });
 
-            // 4. Determine available weeks based on selected year, quarter, and month
             const activitiesInMonth = activitiesInQuarter.filter(activity => {
                 if (!activity.date) return false;
                 const date = new Date(activity.date);
@@ -265,7 +259,6 @@
 
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-            // Helper to populate a select dropdown, preserving selection if possible
             const populate = (select, options, allLabel, formatter) => {
                 const currentValue = select.value;
                 select.innerHTML = `<option value="all">${allLabel}</option>`;
@@ -280,7 +273,6 @@
                 }
             };
 
-            // Populate filters
             populate(yearFilter, years, 'All Years', y => y);
             populate(quarterFilter, quarters, 'All Quarters', q => q);
             populate(monthFilter, months, 'All Months', m => monthNames[m]);
@@ -311,40 +303,26 @@
             calculateUtilization();
         };
         
+        // --- [FIXED] Utilization Calculation ---
+        // This function now reads data from the visible rows in the DOM. This ensures it's always
+        // in sync with what the user sees after the `filterActivities` function has run.
         const calculateUtilization = () => {
             const workingHoursPerWeek = parseFloat(document.getElementById('working-hours').value) || 40;
-            const year = document.getElementById('year-filter').value;
-            const quarter = document.getElementById('quarter-activity-filter').value;
-            const month = document.getElementById('month-filter').value;
-            const week = document.getElementById('week-filter').value;
-
             let totalWorkedHours = 0, billableHoursSum = 0, totalTimeOffHours = 0;
             const weeksInSelection = new Set();
-
-            const filteredActivities = activitiesCache.filter(activity => {
-                if (!activity.date || !activity.week) return false;
-                const activityDate = new Date(activity.date);
-                if (isNaN(activityDate.getTime())) return false;
-
-                const activityWeek = activity.week.toString();
-                const activityQuarter = getQuarterFromWeek(parseInt(activityWeek));
+            
+            const rowsToConsider = Array.from(document.querySelectorAll('#activity-table tbody tr')).filter(row => row.style.display !== 'none');
+            
+            rowsToConsider.forEach(row => {
+                const type = row.querySelector('.type-select').value;
+                const hours = parseFloat(row.querySelector('.total-hours').textContent) || 0;
+                const billableHours = parseFloat(row.querySelector('.billable-hours').textContent) || 0;
                 
-                const yearMatch = year === 'all' || activityDate.getUTCFullYear().toString() === year;
-                const quarterMatch = quarter === 'all' || activityQuarter === quarter;
-                const monthMatch = month === 'all' || activityDate.getUTCMonth().toString() === month;
-                const weekMatch = week === 'all' || activityWeek === week;
-
-                return yearMatch && quarterMatch && monthMatch && weekMatch;
-            });
-
-            filteredActivities.forEach(activity => {
-                const type = activity.type;
-                const hours = parseFloat(activity.totalHours) || 0;
-                weeksInSelection.add(activity.week);
+                weeksInSelection.add(row.querySelector('.week').textContent);
                 
                 if (type === 'Work') {
                     totalWorkedHours += hours;
-                    billableHoursSum += parseFloat(activity.billableHours) || 0;
+                    billableHoursSum += billableHours;
                 } else {
                     totalTimeOffHours += hours;
                 }
@@ -649,7 +627,6 @@
                 document.getElementById('add-objective-btn').addEventListener('click', addObjective);
                 document.getElementById('date-sort-btn').addEventListener('click', toggleDateSort);
                 
-                // --- [NEW] Updated Filter Listeners for Cascading ---
                 document.getElementById('year-filter').addEventListener('change', () => {
                     populateDateFilters();
                     filterActivities();
