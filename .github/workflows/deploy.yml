@@ -1,0 +1,55 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site with Firebase config
+        env:
+          FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
+        run: |
+          if [ -z "$FIREBASE_CONFIG" ]; then
+            echo "::error::Add a FIREBASE_CONFIG repository secret (the firebaseConfig object from your Firebase web app)."
+            exit 1
+          fi
+          mkdir -p _site
+          cp index.html .nojekyll _site/
+          # Accepts JSON or the { apiKey: "...", ... } object exactly as the Firebase console shows it
+          printf 'export const firebaseConfig = %s;\n' "$FIREBASE_CONFIG" > _site/firebase-config.js
+          cp _site/firebase-config.js "$RUNNER_TEMP/firebase-config.mjs"
+          node --input-type=module -e "
+            const { firebaseConfig: c } = await import('file://$RUNNER_TEMP/firebase-config.mjs');
+            for (const k of ['apiKey', 'authDomain', 'projectId', 'appId']) if (!c?.[k]) throw new Error('missing ' + k);
+          " || { echo "::error::FIREBASE_CONFIG must be the config object, starting with { and ending with }."; exit 1; }
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
