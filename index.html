@@ -115,17 +115,9 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously, signOut, linkWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, addDoc, setDoc, deleteDoc, onSnapshot, query, getDocs, writeBatch, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Firebase settings live in firebase-config.js (gitignored). See firebase-config.example.js.
+        import { firebaseConfig } from "./firebase-config.js";
 
-        // --- Firebase Configuration ---
-        const firebaseConfig = {
-            apiKey: "YOUR_FIREBASE_API_KEY",
-            authDomain: "my-okr-tracker-a77ed.firebaseapp.com",
-            projectId: "my-okr-tracker-a77ed",
-            storageBucket: "my-okr-tracker-a77ed.appspot.com",
-            messagingSenderId: "344615597808",
-            appId: "1:344615597808:web:a976849992dc0f9a5d3435",
-            measurementId: "G-BQW8HWHBM3"
-        };
 
         // --- App State ---
         let db, auth, userId;

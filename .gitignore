@@ -1,0 +1,16 @@
+# Local Firebase settings (copy firebase-config.example.js)
+firebase-config.js
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build output and tooling
+_site/
+node_modules/
+.firebase/
+*.log
+
+# OS files
+.DS_Store
